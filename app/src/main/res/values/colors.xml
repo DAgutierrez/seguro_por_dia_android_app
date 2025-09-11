@@ -10,5 +10,20 @@
     <color name="bounding_box_color">#234567</color>
     <color name="gray">#999</color>
     <color name="orange">#F93</color>
+    
+    <!-- Camera UI Colors -->
+    <color name="camera_control_background">#80000000</color>
+    <color name="camera_button_background">#66FFFFFF</color>
+    <color name="camera_button_pressed">#99FFFFFF</color>
+    <color name="flash_on">#FFFFD700</color>
+    <color name="flash_off">#80FFFFFF</color>
+    <color name="detection_enabled">#FF4CAF50</color>
+    <color name="detection_disabled">#80FFFFFF</color>
+    <color name="zoom_background">#80000000</color>
+    <color name="transparent">#00000000</color>
+    <color name="semi_transparent_black">#80000000</color>
+    <color name="semi_transparent_white">#80FFFFFF</color>
+    <color name="zoom_button_selected_text">#FF000000</color>
+    <color name="zoom_button_normal_text">#FFFFFFFF</color>
 
 </resources>

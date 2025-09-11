@@ -25,6 +25,21 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".CameraViewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.YOLOv8TfLite" />
+
+        <activity
+            android:name=".CameraViewActivityOld"
+            android:exported="false"
+            />
+
+        <activity
+            android:name=".CameraListActivity"
+            android:exported="false"
+            android:theme="@style/Theme.YOLOv8TfLite" />
+
         <uses-native-library
             android:name="libOpenCL.so"
             android:required="false"/>

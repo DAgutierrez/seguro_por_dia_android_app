@@ -1,4 +1,15 @@
 <resources>
     <string name="app_name">My Application</string>
     <string name="gpu">GPU</string>
+    
+    <!-- Camera UI Strings -->
+    <string name="flash">Flash</string>
+    <string name="switch_camera">Switch Camera</string>
+    <string name="detection_on">Detection ON</string>
+    <string name="detection_off">Detection OFF</string>
+    <string name="zoom">Zoom</string>
+    <string name="flash_on">Flash ON</string>
+    <string name="flash_off">Flash OFF</string>
+    <string name="flash_auto">Flash AUTO</string>
+    <string name="camera_list">Lista de Cámaras</string>
 </resources>
