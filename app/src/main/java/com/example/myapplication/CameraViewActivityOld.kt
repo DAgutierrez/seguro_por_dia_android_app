@@ -27,6 +27,8 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, Ca
     private var detector: Detector? = null
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var zoomManager: CameraZoomManager
+    private var isFlashOn = false
+    private var camera: androidx.camera.core.Camera? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,7 +76,21 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, Ca
     private fun setupListeners() {
         binding.apply {
             // Back button
+            backButton.setOnClickListener {
+                finish()
+            }
 
+            // Flash Toggle
+            flashToggle.setOnClickListener {
+                isFlashOn = !isFlashOn
+                toggleFlash()
+            }
+
+            // Camera List Button
+            cameraListButton.setOnClickListener {
+                val intent = android.content.Intent(this@CameraViewActivityOld, CameraListActivity::class.java)
+                startActivity(intent)
+            }
 
             // GPU is enabled by default
             Log.d(TAG, "GPU acceleration enabled by default")
@@ -200,7 +216,7 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, Ca
 
             // Bind camera with our custom analyzer
             cameraProvider?.unbindAll()
-            val camera = cameraProvider?.bindToLifecycle(
+            camera = cameraProvider?.bindToLifecycle(
                 this,
                 cameraSelector,
                 preview,
@@ -216,8 +232,9 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, Ca
             // Set up zoom state observation
             val currentZoomRatio = zoomManager.getCurrentZoomRatio()
             Log.d(TAG, "Setting zoom ratio to: $currentZoomRatio")
-            camera.cameraControl.setZoomRatio(currentZoomRatio)
-            camera.cameraInfo.zoomState.observe(this) { zoomState ->
+            val currentCamera = camera
+            currentCamera?.cameraControl?.setZoomRatio(currentZoomRatio)
+            currentCamera?.cameraInfo?.zoomState?.observe(this) { zoomState ->
                 zoomState?.let {
                     zoomManager.updateZoomState(it.minZoomRatio, it.maxZoomRatio)
                 }
@@ -302,6 +319,26 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, Ca
         Log.d(TAG, "Detection count changed to: $count")
     }
 
+    private fun toggleFlash() {
+        try {
+            val currentCamera = camera
+            currentCamera?.cameraControl?.enableTorch(isFlashOn)
+            updateFlashIcon()
+            Log.d(TAG, "Flash toggled: $isFlashOn")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error toggling flash: ${e.message}")
+        }
+    }
+
+    private fun updateFlashIcon() {
+        try {
+            binding.flashToggle.setImageResource(
+                if (isFlashOn) R.drawable.ic_flash_on else R.drawable.ic_flash_off
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating flash icon: ${e.message}")
+        }
+    }
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         return if (::zoomManager.isInitialized) {
