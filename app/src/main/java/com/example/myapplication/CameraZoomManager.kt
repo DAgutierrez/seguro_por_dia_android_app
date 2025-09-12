@@ -90,7 +90,7 @@ class CameraZoomManager(
         zoomSlider: SeekBar?,
         zoom05x: Button?,
         zoom1x: Button?,
-        detectionCount: TextView?,
+        detectionCount: TextView? = null,
         cameraIdDisplay: TextView? = null
     ) {
         this.zoomSlider = zoomSlider

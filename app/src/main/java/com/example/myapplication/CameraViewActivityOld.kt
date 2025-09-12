@@ -119,9 +119,7 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, Ca
                 zoomManager.setUIElements(
                     zoomSlider = binding.zoomSlider,
                     zoom05x = binding.zoom05x,
-                    zoom1x = binding.zoom1x,
-                    detectionCount = binding.detectionCount,
-                    cameraIdDisplay = null
+                    zoom1x = binding.zoom1x
                 )
 
                 // Set zoom listener
@@ -303,6 +301,7 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, Ca
     override fun onDetectionCountChanged(count: Int) {
         Log.d(TAG, "Detection count changed to: $count")
     }
+
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         return if (::zoomManager.isInitialized) {

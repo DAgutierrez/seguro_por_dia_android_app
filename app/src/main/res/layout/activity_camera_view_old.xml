@@ -67,17 +67,6 @@
 
 
 
-        <!-- Detection Count -->
-        <TextView
-            android:id="@+id/detectionCount"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/white"
-            android:textSize="12sp"
-            android:background="@drawable/rounded_background"
-            android:padding="8dp"
-            android:layout_marginEnd="8dp"
-            tools:text="3 objects" />
 
 
         <!-- Camera List Button -->
