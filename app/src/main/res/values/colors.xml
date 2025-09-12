@@ -25,5 +25,9 @@
     <color name="semi_transparent_white">#80FFFFFF</color>
     <color name="zoom_button_selected_text">#FF000000</color>
     <color name="zoom_button_normal_text">#FFFFFFFF</color>
+    <color name="zoom_button_selected_background">#FFFFFFFF</color>
+    <color name="zoom_button_normal_background">#40FFFFFF</color>
+    <color name="zoom_button_pressed_background">#80FFFFFF</color>
+    <color name="zoom_container_background">#CC000000</color>
 
 </resources>

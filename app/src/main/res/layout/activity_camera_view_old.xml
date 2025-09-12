@@ -146,64 +146,42 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-    <!-- Zoom Controls -->
+    <!-- Quick Zoom Buttons -->
     <LinearLayout
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center"
-        android:layout_marginBottom="16dp">
+        android:layout_marginBottom="16dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/quick_zoom_background"
+        android:padding="6dp">
 
-        <!-- Zoom Level Display -->
-        <TextView
-            android:id="@+id/zoomLevel"
+        <Button
+            android:id="@+id/zoom05x"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="1.0x"
-            android:textColor="@color/white"
-            android:textSize="16sp"
+            android:text="0.5x"
+            android:textColor="@color/zoom_button_normal_text"
+            android:textSize="14sp"
             android:textStyle="bold"
-            android:background="@drawable/zoom_indicator_background"
-            android:padding="12dp"
-            android:minWidth="60dp"
-            android:gravity="center" />
+            android:background="@drawable/quick_zoom_button_background"
+            android:minWidth="50dp"
+            android:minHeight="40dp"
+            android:layout_marginEnd="4dp" />
 
-        <!-- Quick Zoom Buttons -->
-        <LinearLayout
+        <Button
+            android:id="@+id/zoom1x"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginStart="16dp"
-            android:background="@drawable/quick_zoom_background"
-            android:padding="4dp">
-
-            <Button
-                android:id="@+id/zoom05x"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="0.5x"
-                android:textColor="@color/zoom_button_normal_text"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:background="@drawable/quick_zoom_button_background"
-                android:minWidth="40dp"
-                android:minHeight="32dp"
-                android:layout_marginEnd="2dp" />
-
-            <Button
-                android:id="@+id/zoom1x"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="1x"
-                android:textColor="@color/zoom_button_selected_text"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:background="@drawable/quick_zoom_button_background"
-                android:minWidth="40dp"
-                android:minHeight="32dp"
-                android:layout_marginStart="2dp" />
-
-        </LinearLayout>
+            android:text="1x"
+            android:textColor="@color/zoom_button_selected_text"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:background="@drawable/quick_zoom_button_background"
+            android:minWidth="50dp"
+            android:minHeight="40dp"
+            android:layout_marginStart="4dp" />
 
     </LinearLayout>
 

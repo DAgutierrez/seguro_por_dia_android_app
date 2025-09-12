@@ -40,7 +40,6 @@ class CameraZoomManager(
 ) {
     
     // UI Elements
-    private var zoomLevel: TextView? = null
     private var zoomSlider: SeekBar? = null
     private var zoom05x: Button? = null
     private var zoom1x: Button? = null
@@ -88,14 +87,12 @@ class CameraZoomManager(
     }
 
     fun setUIElements(
-        zoomLevel: TextView?,
         zoomSlider: SeekBar?,
         zoom05x: Button?,
         zoom1x: Button?,
         detectionCount: TextView?,
         cameraIdDisplay: TextView?
     ) {
-        this.zoomLevel = zoomLevel
         this.zoomSlider = zoomSlider
         this.detectionCount = detectionCount
         this.cameraIdDisplay = cameraIdDisplay
@@ -117,7 +114,6 @@ class CameraZoomManager(
 
     private fun setupInitialUI() {
         try {
-            zoomLevel?.text = "1.0x"
             detectionCount?.text = "Detections: 0"
             cameraIdDisplay?.text = "Camera ID: Unknown"
         } catch (e: Exception) {
@@ -244,10 +240,15 @@ class CameraZoomManager(
             // Zoom button listeners
             zoom05x?.setOnClickListener {
                 Log.d(TAG, "🔘 0.5x button pressed")
+                // Update internal zoom ratio first
+                zoomRatio = 0.5f
+                Log.d(TAG, "📊 Internal zoomRatio updated to: $zoomRatio")
+                
                 // Try to force switch to ultra-wide first
                 val switched = forceSwitchToUltraWide()
                 if (switched) {
                     Log.d(TAG, "🔄 Ultra-wide switch successful, notifying listener")
+                    updateZoomButtonStates()
                     zoomListener?.onCameraSwitchNeeded()
                 } else {
                     Log.d(TAG, "⚠️ Ultra-wide switch failed, using normal zoom")
@@ -256,6 +257,10 @@ class CameraZoomManager(
             }
 
             zoom1x?.setOnClickListener {
+                Log.d(TAG, "🔘 1x button pressed")
+                // Update internal zoom ratio first
+                zoomRatio = 1.0f
+                Log.d(TAG, "📊 Internal zoomRatio updated to: $zoomRatio")
                 setZoomRatio(1.0f)
             }
 
@@ -388,7 +393,6 @@ class CameraZoomManager(
                 camera?.cameraControl?.setZoomRatio(newZoomRatio)
             }
 
-            zoomLevel?.text = String.format("%.1fx", newZoomRatio)
             updateZoomButtonStates()
             updateZoomSlider()
             
@@ -555,23 +559,42 @@ class CameraZoomManager(
             zoom05x?.isEnabled = canUse05x
             zoom05x?.alpha = if (canUse05x) 1.0f else 0.5f
 
-            // Update button selection states
+            // Update button selection states - ensure only one is selected
             val is05xSelected = zoomRatio <= 0.6f
             val is1xSelected = zoomRatio >= 0.8f && zoomRatio <= 1.2f
 
+            // Ensure mutual exclusivity - only one button can be selected
+            if (is05xSelected) {
+                zoom05x?.isSelected = true
+                zoom1x?.isSelected = false
+            } else if (is1xSelected) {
+                zoom05x?.isSelected = false
+                zoom1x?.isSelected = true
+            } else {
+                // Neither is selected (intermediate zoom levels)
+                zoom05x?.isSelected = false
+                zoom1x?.isSelected = false
+            }
+
+            // Update text colors based on selection state
             zoom05x?.setTextColor(
                 ContextCompat.getColor(
                     context,
-                    if (is05xSelected) R.color.zoom_button_selected_text else R.color.zoom_button_normal_text
+                    if (zoom05x?.isSelected == true) R.color.zoom_button_selected_text else R.color.zoom_button_normal_text
                 )
             )
 
             zoom1x?.setTextColor(
                 ContextCompat.getColor(
                     context,
-                    if (is1xSelected) R.color.zoom_button_selected_text else R.color.zoom_button_normal_text
+                    if (zoom1x?.isSelected == true) R.color.zoom_button_selected_text else R.color.zoom_button_normal_text
                 )
             )
+
+            Log.d(TAG, "🔘 Zoom button states updated:")
+            Log.d(TAG, "   - Current zoomRatio: $zoomRatio")
+            Log.d(TAG, "   - 0.5x selected: ${zoom05x?.isSelected} (should be: $is05xSelected)")
+            Log.d(TAG, "   - 1x selected: ${zoom1x?.isSelected} (should be: $is1xSelected)")
         } catch (e: Exception) {
             Log.e(TAG, "Error updating zoom button states: ${e.message}")
         }

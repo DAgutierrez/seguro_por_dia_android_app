@@ -124,7 +124,6 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, Ca
 
                 // Set UI elements
                 zoomManager.setUIElements(
-                    zoomLevel = binding.zoomLevel,
                     zoomSlider = binding.zoomSlider,
                     zoom05x = binding.zoom05x,
                     zoom1x = binding.zoom1x,
