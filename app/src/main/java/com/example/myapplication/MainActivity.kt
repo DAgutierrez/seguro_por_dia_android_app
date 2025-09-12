@@ -21,10 +21,6 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
-        findViewById<Button>(R.id.btn_camera_view_old).setOnClickListener {
-            val intent = Intent(this@MainActivity, CameraViewActivityOld::class.java)
-            startActivity(intent)
-        }
         
         // Camera List Button
         findViewById<Button>(R.id.btn_camera_list).setOnClickListener {

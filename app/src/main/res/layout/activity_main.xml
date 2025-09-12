@@ -46,18 +46,7 @@
             android:drawableStart="@drawable/ic_camera"
             android:drawablePadding="16dp" />
 
-            <Button
-            android:id="@+id/btn_camera_view_old"
-            android:layout_width="match_parent"
-            android:layout_height="80dp"
-            android:text="📷 Abrir Cámara"
-            android:textColor="@color/white"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:background="@drawable/camera_button_background"
-            android:layout_marginBottom="24dp"
-            android:drawableStart="@drawable/ic_camera"
-            android:drawablePadding="16dp" />
+           
 
         <!-- Camera List Button -->
         <Button
