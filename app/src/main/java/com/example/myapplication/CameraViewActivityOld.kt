@@ -54,7 +54,9 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, Ca
     private fun initializeDetector() {
         try {
             detector = Detector(baseContext, MODEL_PATH, LABELS_PATH, this@CameraViewActivityOld)
-            Log.d(TAG, "Detector initialized successfully")
+            // Enable GPU acceleration by default
+            detector?.restart(isGpu = true)
+            Log.d(TAG, "Detector initialized successfully with GPU acceleration enabled")
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing detector: ${e.message}")
             showErrorDialog("Error inicializando detector", e.message ?: "Error desconocido")
@@ -74,17 +76,8 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, Ca
             // Back button
 
 
-            // GPU toggle
-            isGpu.setOnCheckedChangeListener { buttonView, isChecked ->
-                cameraExecutor.submit {
-                    detector?.restart(isGpu = isChecked)
-                }
-                if (isChecked) {
-                    buttonView.setBackgroundColor(ContextCompat.getColor(baseContext, R.color.orange))
-                } else {
-                    buttonView.setBackgroundColor(ContextCompat.getColor(baseContext, R.color.gray))
-                }
-            }
+            // GPU is enabled by default
+            Log.d(TAG, "GPU acceleration enabled by default")
         }
     }
 
