@@ -2,39 +2,31 @@ package com.example.myapplication
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.os.Bundle
 import android.util.Log
+import android.view.MotionEvent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.core.AspectRatio
-import androidx.camera.core.Camera
-import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.myapplication.Constants.LABELS_PATH
 import com.example.myapplication.Constants.MODEL_PATH
 import com.example.myapplication.databinding.ActivityCameraViewOldBinding
-import com.example.myapplication.databinding.ActivityMainBinding
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 
-class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener {
+class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, CameraZoomManager.ZoomListener {
     private lateinit var binding: ActivityCameraViewOldBinding
     private val isFrontCamera = false
 
-    private var preview: Preview? = null
-    private var imageAnalyzer: ImageAnalysis? = null
-    private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var detector: Detector? = null
-
     private lateinit var cameraExecutor: ExecutorService
+    private lateinit var zoomManager: CameraZoomManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,21 +35,46 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        cameraExecutor.execute {
-            detector = Detector(baseContext, MODEL_PATH, LABELS_PATH, this)
-        }
+        try {
+            initializeDetector()
+            setupInitialUI()
 
-        if (allPermissionsGranted()) {
-            startCamera()
-        } else {
-            ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
-        }
+            if (allPermissionsGranted()) {
+                startCamera()
+            } else {
+                ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+            }
 
-        bindListeners()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onCreate: ${e.message}")
+            showErrorDialog("Error inicializando la aplicación", e.message ?: "Error desconocido")
+        }
     }
 
-    private fun bindListeners() {
+    private fun initializeDetector() {
+        try {
+            detector = Detector(baseContext, MODEL_PATH, LABELS_PATH, this@CameraViewActivityOld)
+            Log.d(TAG, "Detector initialized successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing detector: ${e.message}")
+            showErrorDialog("Error inicializando detector", e.message ?: "Error desconocido")
+        }
+    }
+
+    private fun setupInitialUI() {
+        try {
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting up initial UI: ${e.message}")
+        }
+    }
+
+    private fun setupListeners() {
         binding.apply {
+            // Back button
+
+
+            // GPU toggle
             isGpu.setOnCheckedChangeListener { buttonView, isChecked ->
                 cameraExecutor.submit {
                     detector?.restart(isGpu = isChecked)
@@ -74,77 +91,155 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener {
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
-            cameraProvider  = cameraProviderFuture.get()
-            bindCameraUseCases()
+            try {
+                cameraProvider = cameraProviderFuture.get()
+                setupZoomManager()
+                // bindCameraUseCases() will be called from setupZoomManager after initialization
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting camera: ${e.message}")
+                showErrorDialog("Error iniciando cámara", e.message ?: "Error desconocido")
+            }
         }, ContextCompat.getMainExecutor(this))
     }
 
+    private fun setupZoomManager() {
+        try {
+            cameraProvider?.let { provider ->
+                if (detector == null) {
+                    Log.e(TAG, "Detector is null, cannot setup zoom manager")
+                    return
+                }
+
+                Log.d(TAG, "Setting up zoom manager with detector: ${detector != null}")
+                
+                zoomManager = CameraZoomManager(
+                    context = this,
+                    cameraProvider = provider,
+                    previewView = binding.viewFinder,
+                    overlayView = binding.overlay,
+                    cameraExecutor = cameraExecutor,
+                    detector = detector,
+                    isFrontCamera = isFrontCamera
+                )
+
+                // Set UI elements
+                zoomManager.setUIElements(
+                    zoomLevel = binding.zoomLevel,
+                    zoomSlider = binding.zoomSlider,
+                    zoom05x = binding.zoom05x,
+                    zoom1x = binding.zoom1x,
+                    detectionCount = binding.detectionCount,
+                    cameraIdDisplay = binding.cameraIdDisplay
+                )
+
+                // Set zoom listener
+                zoomManager.setZoomListener(this)
+
+                // Initialize zoom manager
+                zoomManager.initialize()
+
+                // Setup other listeners
+                setupListeners()
+                
+                // Now bind camera use cases after everything is ready
+                bindCameraUseCases()
+                
+                Log.d(TAG, "Zoom manager setup completed with detector")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting up zoom manager: ${e.message}")
+            showErrorDialog("Error configurando zoom manager", e.message ?: "Error desconocido")
+        }
+    }
+
     private fun bindCameraUseCases() {
-        val cameraProvider = cameraProvider ?: throw IllegalStateException("Camera initialization failed.")
+        try {
+            Log.d(TAG, "bindCameraUseCases called - detector: ${detector != null}")
+            
+            // Don't use zoom manager's bindCameraUseCases, handle everything ourselves
+            val rotation = binding.viewFinder.display.rotation
+            val cameraSelector = zoomManager.getCurrentCameraSelector()
 
-        val rotation = binding.viewFinder.display.rotation
+            val preview = androidx.camera.core.Preview.Builder()
+                .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
+                .setTargetRotation(rotation)
+                .build()
 
-        val cameraSelector = CameraSelector
-            .Builder()
-            .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-            .build()
+            val imageAnalyzer = ImageAnalysis.Builder()
+                .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .setTargetRotation(binding.viewFinder.display.rotation)
+                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                .build()
 
-        preview =  Preview.Builder()
-            .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-            .setTargetRotation(rotation)
-            .build()
+            imageAnalyzer.setAnalyzer(cameraExecutor) { imageProxy ->
+                if (detector == null) {
+                    Log.d(TAG, "Detector is null, skipping analysis")
+                    imageProxy.close()
+                    return@setAnalyzer
+                }
 
-        imageAnalyzer = ImageAnalysis.Builder()
-            .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .setTargetRotation(binding.viewFinder.display.rotation)
-            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-            .build()
-
-        imageAnalyzer?.setAnalyzer(cameraExecutor) { imageProxy ->
-            val bitmapBuffer =
-                Bitmap.createBitmap(
+                val bitmapBuffer = android.graphics.Bitmap.createBitmap(
                     imageProxy.width,
                     imageProxy.height,
-                    Bitmap.Config.ARGB_8888
+                    android.graphics.Bitmap.Config.ARGB_8888
                 )
-            imageProxy.use { bitmapBuffer.copyPixelsFromBuffer(imageProxy.planes[0].buffer) }
-            imageProxy.close()
+                imageProxy.use { bitmapBuffer.copyPixelsFromBuffer(imageProxy.planes[0].buffer) }
+                imageProxy.close()
 
-            val matrix = Matrix().apply {
-                postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
-
-                if (isFrontCamera) {
-                    postScale(
-                        -1f,
-                        1f,
-                        imageProxy.width.toFloat(),
-                        imageProxy.height.toFloat()
-                    )
+                val matrix = android.graphics.Matrix().apply {
+                    postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
+                    if (isFrontCamera) {
+                        postScale(
+                            -1f,
+                            1f,
+                            imageProxy.width.toFloat(),
+                            imageProxy.height.toFloat()
+                        )
+                    }
                 }
+
+                val rotatedBitmap = android.graphics.Bitmap.createBitmap(
+                    bitmapBuffer, 0, 0, bitmapBuffer.width, bitmapBuffer.height,
+                    matrix, true
+                )
+
+                Log.d(TAG, "Calling detector.detect() directly")
+                detector?.detect(rotatedBitmap)
             }
 
-            val rotatedBitmap = Bitmap.createBitmap(
-                bitmapBuffer, 0, 0, bitmapBuffer.width, bitmapBuffer.height,
-                matrix, true
-            )
-
-            detector?.detect(rotatedBitmap)
-        }
-
-        cameraProvider.unbindAll()
-
-        try {
-            camera = cameraProvider.bindToLifecycle(
+            // Bind camera with our custom analyzer
+            cameraProvider?.unbindAll()
+            val camera = cameraProvider?.bindToLifecycle(
                 this,
                 cameraSelector,
                 preview,
                 imageAnalyzer
             )
 
-            preview?.setSurfaceProvider(binding.viewFinder.surfaceProvider)
-        } catch(exc: Exception) {
-            Log.e(TAG, "Use case binding failed", exc)
+            if (camera == null) {
+                Log.e(TAG, "Failed to bind camera use cases")
+                showErrorDialog("Error", "No se pudo configurar la cámara")
+                return
+            }
+
+            // Set up zoom state observation
+            val currentZoomRatio = zoomManager.getCurrentZoomRatio()
+            Log.d(TAG, "Setting zoom ratio to: $currentZoomRatio")
+            camera.cameraControl.setZoomRatio(currentZoomRatio)
+            camera.cameraInfo.zoomState.observe(this) { zoomState ->
+                zoomState?.let {
+                    zoomManager.updateZoomState(it.minZoomRatio, it.maxZoomRatio)
+                }
+            }
+
+            preview.setSurfaceProvider(binding.viewFinder.surfaceProvider)
+            
+            Log.d(TAG, "Camera bound with custom image analyzer")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error binding camera use cases: ${e.message}")
+            showErrorDialog("Error configurando la cámara", e.message ?: "Error desconocido")
         }
     }
 
@@ -183,16 +278,57 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener {
     override fun onEmptyDetect() {
         runOnUiThread {
             binding.overlay.clear()
+            zoomManager.updateDetectionCount(0)
         }
     }
 
     override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
         runOnUiThread {
             binding.inferenceTime.text = "${inferenceTime}ms"
+            zoomManager.updateDetectionCount(boundingBoxes.size)
             binding.overlay.apply {
                 setResults(boundingBoxes)
                 invalidate()
             }
+        }
+    }
+
+    // CameraZoomManager.ZoomListener implementation
+    override fun onCameraSwitched(cameraId: String) {
+        Log.d(TAG, "Camera switched to: $cameraId")
+    }
+
+    override fun onZoomChanged(zoomRatio: Float) {
+        Log.d(TAG, "Zoom changed to: $zoomRatio")
+    }
+
+    override fun onCameraSwitchNeeded() {
+        Log.d(TAG, "Camera switch needed, rebinding with new selector")
+        // Rebind camera with new selector but keep our custom image analyzer
+        bindCameraUseCases()
+    }
+
+    override fun onDetectionCountChanged(count: Int) {
+        Log.d(TAG, "Detection count changed to: $count")
+    }
+
+    override fun onTouchEvent(event: MotionEvent?): Boolean {
+        return if (::zoomManager.isInitialized) {
+            zoomManager.onTouchEvent(event)
+        } else {
+            super.onTouchEvent(event)
+        }
+    }
+
+    private fun showErrorDialog(title: String, message: String) {
+        try {
+            AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+                .show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing error dialog: ${e.message}")
         }
     }
 }

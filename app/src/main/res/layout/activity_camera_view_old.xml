@@ -65,7 +65,216 @@
             app:layout_constraintVertical_bias="0.5" />
 
 
+
+
+
     </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <LinearLayout
+        android:id="@+id/top_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center_vertical"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Back Button -->
+        <ImageButton
+            android:id="@+id/back_button"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/camera_button_background"
+            android:src="@drawable/ic_arrow_back"
+            android:contentDescription="Volver"
+            android:layout_marginEnd="8dp" />
+
+
+
+        <!-- Detection Count -->
+        <TextView
+            android:id="@+id/detectionCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white"
+            android:textSize="12sp"
+            android:background="@drawable/rounded_background"
+            android:padding="8dp"
+            android:layout_marginEnd="8dp"
+            tools:text="3 objects" />
+
+        <!-- Camera ID Display -->
+        <TextView
+            android:id="@+id/cameraIdDisplay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white"
+            android:textSize="12sp"
+            android:background="@drawable/rounded_background"
+            android:padding="8dp"
+            android:layout_marginEnd="8dp"
+            tools:text="Camera: 0" />
+
+        <!-- Camera List Button -->
+        <ImageButton
+            android:id="@+id/camera_list_button"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/camera_button_background"
+            android:src="@drawable/ic_camera_list"
+            android:contentDescription="@string/camera_list"
+            android:layout_marginEnd="8dp" />
+
+
+
+    </LinearLayout>
+
+
+
+
+    <LinearLayout
+        android:id="@+id/bottom_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:background="@drawable/control_panel_background"
+        android:layout_marginBottom="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+    <!-- Zoom Controls -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginBottom="16dp">
+
+        <!-- Zoom Level Display -->
+        <TextView
+            android:id="@+id/zoomLevel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="1.0x"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:background="@drawable/zoom_indicator_background"
+            android:padding="12dp"
+            android:minWidth="60dp"
+            android:gravity="center" />
+
+        <!-- Quick Zoom Buttons -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginStart="16dp"
+            android:background="@drawable/quick_zoom_background"
+            android:padding="4dp">
+
+            <Button
+                android:id="@+id/zoom05x"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0.5x"
+                android:textColor="@color/zoom_button_normal_text"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:background="@drawable/quick_zoom_button_background"
+                android:minWidth="40dp"
+                android:minHeight="32dp"
+                android:layout_marginEnd="2dp" />
+
+            <Button
+                android:id="@+id/zoom1x"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="1x"
+                android:textColor="@color/zoom_button_selected_text"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:background="@drawable/quick_zoom_button_background"
+                android:minWidth="40dp"
+                android:minHeight="32dp"
+                android:layout_marginStart="2dp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Flash Toggle -->
+            <ImageButton
+                android:id="@+id/flashToggle"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/camera_button_background"
+                android:src="@drawable/ic_flash_off"
+                android:contentDescription="@string/flash"
+                android:layout_marginEnd="24dp" />
+
+            <!-- Camera Switch -->
+            <ImageButton
+                android:id="@+id/cameraSwitch"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/camera_button_background"
+                android:src="@drawable/ic_camera_switch"
+                android:contentDescription="@string/switch_camera"
+                android:layout_marginEnd="24dp" />
+
+            <!-- Center Space -->
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <!-- Detection Toggle -->
+            <ToggleButton
+                android:id="@+id/detectionToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/detection_toggle_background"
+                android:textColor="@color/white"
+                android:textOff="@string/detection_off"
+                android:textOn="@string/detection_on"
+                android:textSize="12sp"
+                android:minWidth="80dp"
+                android:minHeight="40dp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <SeekBar
+        android:id="@+id/zoom_slider"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:max="100"
+        android:progress="0"
+        android:rotation="270"
+        android:thumb="@drawable/zoom_thumb"
+        android:progressTint="@color/white"
+        android:thumbTint="@color/white"
+        android:layout_marginEnd="16dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:visibility="gone" />
+
+
+
+
 
     <!--    <ImageView-->
     <!--        android:id="@+id/ivTop"-->
