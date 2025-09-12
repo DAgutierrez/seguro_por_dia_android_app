@@ -121,7 +121,7 @@ class CameraViewActivityOld : AppCompatActivity(), Detector.DetectorListener, Ca
                     zoom05x = binding.zoom05x,
                     zoom1x = binding.zoom1x,
                     detectionCount = binding.detectionCount,
-                    cameraIdDisplay = binding.cameraIdDisplay
+                    cameraIdDisplay = null
                 )
 
                 // Set zoom listener

@@ -79,17 +79,6 @@
             android:layout_marginEnd="8dp"
             tools:text="3 objects" />
 
-        <!-- Camera ID Display -->
-        <TextView
-            android:id="@+id/cameraIdDisplay"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="@color/white"
-            android:textSize="12sp"
-            android:background="@drawable/rounded_background"
-            android:padding="8dp"
-            android:layout_marginEnd="8dp"
-            tools:text="Camera: 0" />
 
         <!-- Camera List Button -->
         <ImageButton
