@@ -166,6 +166,10 @@ class Detector(
 
             if (maxConf > CONFIDENCE_THRESHOLD) {
                 val clsName = labels[maxIdx]
+                
+                // Filter for vehicles only
+                if (!isVehicle(clsName)) continue
+                
                 val cx = array[c] // 0
                 val cy = array[c + numElements] // 1
                 val w = array[c + numElements * 2]
@@ -225,6 +229,13 @@ class Detector(
         val box1Area = box1.w * box1.h
         val box2Area = box2.w * box2.h
         return intersectionArea / (box1Area + box2Area - intersectionArea)
+    }
+
+    private fun isVehicle(className: String): Boolean {
+        return when (className.lowercase()) {
+            "car", "motorcycle", "bus", "truck" -> true
+            else -> false
+        }
     }
 
     interface DetectorListener {
