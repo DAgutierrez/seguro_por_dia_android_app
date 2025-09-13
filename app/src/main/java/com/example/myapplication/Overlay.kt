@@ -19,6 +19,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var textBackgroundPaint = Paint()
     private var textPaint = Paint()
     private var guideFramePaint = Paint()
+    private var innerFramePaint = Paint()
     private var instructionPaint = Paint()
 
     private var bounds = Rect()
@@ -36,6 +37,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         textBackgroundPaint.reset()
         boxPaint.reset()
         guideFramePaint.reset()
+        innerFramePaint.reset()
         instructionPaint.reset()
         invalidate()
         initPaints()
@@ -54,10 +56,15 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         boxPaint.strokeWidth = 8F
         boxPaint.style = Paint.Style.STROKE
         
-        // Guide frame paint
+        // Guide frame paint (frame exterior)
         guideFramePaint.color = Color.YELLOW
         guideFramePaint.strokeWidth = 4f
         guideFramePaint.style = Paint.Style.STROKE
+        
+        // Inner frame paint (frame interior 5% más adentro)
+        innerFramePaint.color = Color.GREEN
+        innerFramePaint.strokeWidth = 3f
+        innerFramePaint.style = Paint.Style.STROKE
         
         // Instruction paint
         instructionPaint.color = Color.RED
@@ -69,9 +76,19 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     override fun draw(canvas: Canvas) {
         super.draw(canvas)
 
-        // Draw guide frame
+        // Draw outer guide frame (amarillo)
         val guideFrame = positioningHelper.getGuideFrame(width, height)
         canvas.drawRect(guideFrame, guideFramePaint)
+        
+        // Draw inner frame (verde) - 5% más adentro
+        val innerFramePadding = 0.1f // 5% de la pantalla
+        val innerFrameLeft = guideFrame.left + (width * innerFramePadding)
+        val innerFrameTop = guideFrame.top + (height * innerFramePadding)
+        val innerFrameRight = guideFrame.right - (width * innerFramePadding)
+        val innerFrameBottom = guideFrame.bottom - (height * innerFramePadding)
+        
+        val innerFrame = RectF(innerFrameLeft, innerFrameTop, innerFrameRight, innerFrameBottom)
+        canvas.drawRect(innerFrame, innerFramePaint)
 
         // Analyze vehicle position and get instruction
         var bestVehicle: BoundingBox? = null
