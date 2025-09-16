@@ -20,7 +20,7 @@ class VehiclePositioningHelper {
     
     /**
      * Analiza la posición del vehículo y retorna la instrucción correspondiente
-     * Implementa la nueva lógica basada en dos frames
+     * Implementa la nueva lógica mejorada con detección de lados específicos
      */
     fun analyzeVehiclePosition(vehicle: BoundingBox, screenWidth: Int, screenHeight: Int): PositioningResult {
         // Calcular el frame guía (exterior)
@@ -38,14 +38,15 @@ class VehiclePositioningHelper {
         val innerFrame = RectF(innerFrameLeft, innerFrameTop, innerFrameRight, innerFrameBottom)
         
         // Calcular centros de los frames
-        val guideFrameCenterX = (guideFrameLeft + guideFrameRight) / 2f
-        val guideFrameCenterY = (guideFrameTop + guideFrameBottom) / 2f
         val innerFrameCenterX = (innerFrameLeft + innerFrameRight) / 2f
         val innerFrameCenterY = (innerFrameTop + innerFrameBottom) / 2f
         
         // Calcular centro del vehículo
         val vehicleCenterX = vehicle.cx
         val vehicleCenterY = vehicle.cy
+        
+        // Analizar qué lados del vehículo salen del frame guía
+        val sidesOutOfGuideFrame = analyzeSidesOutOfFrame(vehicle, guideFrame)
         
         // 1. Verificar Estado Perfecto
         val isInGuideFrame = isVehicleInFrame(vehicle, guideFrame)
@@ -72,7 +73,8 @@ class VehiclePositioningHelper {
             )
         }
         
-        if (!isInGuideFrame) {
+        // Verificar si sale del frame guía con al menos dos lados
+        if (sidesOutOfGuideFrame.count() >= 2) {
             return PositioningResult(
                 instruction = "Aléjate",
                 isVehicleInFrame = false,
@@ -81,11 +83,15 @@ class VehiclePositioningHelper {
             )
         }
         
-        // 3. Verificar Alineación Horizontal
-        val horizontalInstruction = checkHorizontalAlignment(vehicleCenterX, innerFrameCenterX)
+        // 3. Verificar Alineación Horizontal (incluye casos de salida por un lado)
+        val horizontalInstruction = checkHorizontalAlignmentWithSides(
+            vehicleCenterX, innerFrameCenterX, sidesOutOfGuideFrame
+        )
         
-        // 4. Verificar Alineación Vertical
-        val verticalInstruction = checkVerticalAlignment(vehicleCenterY, innerFrameCenterY)
+        // 4. Verificar Alineación Vertical (incluye casos de salida por un lado)
+        val verticalInstruction = checkVerticalAlignmentWithSides(
+            vehicleCenterY, innerFrameCenterY, sidesOutOfGuideFrame
+        )
         
         // Combinar instrucciones si hay múltiples
         val instructions = listOfNotNull(horizontalInstruction, verticalInstruction)
@@ -114,9 +120,38 @@ class VehiclePositioningHelper {
     }
     
     /**
-     * Regla 3: Verifica alineación horizontal basada en el centro del inner frame
+     * Analiza qué lados del vehículo salen del frame
      */
-    private fun checkHorizontalAlignment(vehicleCenterX: Float, innerFrameCenterX: Float): String? {
+    private fun analyzeSidesOutOfFrame(vehicle: BoundingBox, frame: RectF): Set<Side> {
+        val sidesOut = mutableSetOf<Side>()
+        
+        if (vehicle.x1 < frame.left) sidesOut.add(Side.LEFT)
+        if (vehicle.x2 > frame.right) sidesOut.add(Side.RIGHT)
+        if (vehicle.y1 < frame.top) sidesOut.add(Side.TOP)
+        if (vehicle.y2 > frame.bottom) sidesOut.add(Side.BOTTOM)
+        
+        return sidesOut
+    }
+    
+    /**
+     * Regla 3: Verifica alineación horizontal incluyendo casos de salida por lados específicos
+     */
+    private fun checkHorizontalAlignmentWithSides(
+        vehicleCenterX: Float, 
+        innerFrameCenterX: Float, 
+        sidesOutOfGuideFrame: Set<Side>
+    ): String? {
+        // Caso especial: sale solo por el lado derecho
+        if (sidesOutOfGuideFrame == setOf(Side.RIGHT)) {
+            return "Muévete a la izquierda"
+        }
+        
+        // Caso especial: sale solo por el lado izquierdo
+        if (sidesOutOfGuideFrame == setOf(Side.LEFT)) {
+            return "Muévete a la derecha"
+        }
+        
+        // Verificación normal de centrado horizontal
         val horizontalDifference = vehicleCenterX - innerFrameCenterX
         
         return when {
@@ -127,9 +162,24 @@ class VehiclePositioningHelper {
     }
     
     /**
-     * Regla 4: Verifica alineación vertical basada en el centro del inner frame
+     * Regla 4: Verifica alineación vertical incluyendo casos de salida por lados específicos
      */
-    private fun checkVerticalAlignment(vehicleCenterY: Float, innerFrameCenterY: Float): String? {
+    private fun checkVerticalAlignmentWithSides(
+        vehicleCenterY: Float, 
+        innerFrameCenterY: Float, 
+        sidesOutOfGuideFrame: Set<Side>
+    ): String? {
+        // Caso especial: sale solo por el lado superior
+        if (sidesOutOfGuideFrame == setOf(Side.TOP)) {
+            return "Muévete más abajo"
+        }
+        
+        // Caso especial: sale solo por el lado inferior
+        if (sidesOutOfGuideFrame == setOf(Side.BOTTOM)) {
+            return "Muévete más arriba"
+        }
+        
+        // Verificación normal de centrado vertical
         val verticalDifference = vehicleCenterY - innerFrameCenterY
         
         return when {
@@ -137,6 +187,13 @@ class VehiclePositioningHelper {
             verticalDifference < -CENTER_THRESHOLD -> "Muévete más arriba" // Más abajo que el centro
             else -> null // Está centrado verticalmente
         }
+    }
+    
+    /**
+     * Enum para identificar los lados del frame
+     */
+    private enum class Side {
+        LEFT, RIGHT, TOP, BOTTOM
     }
     
     /**
