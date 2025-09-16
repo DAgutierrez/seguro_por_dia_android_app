@@ -101,10 +101,47 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         var bestVehicle: BoundingBox? = null
         var bestPositioning: VehiclePositioningHelper.PositioningResult? = null
 
+        // Evaluate positioning using overlay-normalized boxes to account for scale/offset in landscape
         results.forEach { vehicle ->
-            val positioning = positioningHelper.analyzeVehiclePosition(vehicle, width, height)
+            val overlayNormBox = if (rotationDegrees == 0) {
+                // Landscape: center-crop projection to overlay, then normalize to [0,1] of overlay
+                val base = 640f
+                val scale = maxOf(width.toFloat() / base, height.toFloat() / base)
+                val drawnW = base * scale
+                val drawnH = base * scale
+                val offsetX = (width - drawnW) / 2f
+                val offsetY = (height - drawnH) / 2f
+
+                val leftPx = vehicle.x1 * base * scale + offsetX
+                val topPx = vehicle.y1 * base * scale + offsetY
+                val rightPx = vehicle.x2 * base * scale + offsetX
+                val bottomPx = vehicle.y2 * base * scale + offsetY
+
+                val x1n = (leftPx / width).coerceIn(0f, 1f)
+                val y1n = (topPx / height).coerceIn(0f, 1f)
+                val x2n = (rightPx / width).coerceIn(0f, 1f)
+                val y2n = (bottomPx / height).coerceIn(0f, 1f)
+                BoundingBox(
+                    x1 = x1n,
+                    y1 = y1n,
+                    x2 = x2n,
+                    y2 = y2n,
+                    cx = (x1n + x2n) / 2f,
+                    cy = (y1n + y2n) / 2f,
+                    w = (x2n - x1n).coerceAtLeast(0f),
+                    h = (y2n - y1n).coerceAtLeast(0f),
+                    cnf = vehicle.cnf,
+                    cls = vehicle.cls,
+                    clsName = vehicle.clsName
+                )
+            } else {
+                // Portrait path remains as original normalized
+                vehicle
+            }
+
+            val positioning = positioningHelper.analyzeVehiclePosition(overlayNormBox, width, height)
             if (bestVehicle == null || positioning.vehicleSize > bestPositioning?.vehicleSize ?: 0f) {
-                bestVehicle = vehicle
+                bestVehicle = overlayNormBox
                 bestPositioning = positioning
             }
         }
