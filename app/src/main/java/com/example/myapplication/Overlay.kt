@@ -123,7 +123,36 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
         // Draw vehicle bounding boxes
         results.forEach { vehicle ->
+            val base = 640f
+            if (rotationDegrees == 0) {
+                // Landscape: center-crop to fix left/right
+                val scale = maxOf(canvas.width.toFloat() / base, canvas.height.toFloat() / base)
+                val drawnW = base * scale
+                val drawnH = base * scale
+                val offsetX = (canvas.width - drawnW) / 2f
+                val offsetY = (canvas.height - drawnH) / 2f
 
+                val left = vehicle.x1 * base * scale + offsetX
+                val top = vehicle.y1 * base * scale + offsetY
+                val right = vehicle.x2 * base * scale + offsetX
+                val bottom = vehicle.y2 * base * scale + offsetY
+
+                canvas.drawRect(left, top, right, bottom, boxPaint)
+                val drawableText = vehicle.clsName
+
+                textBackgroundPaint.getTextBounds(drawableText, 0, drawableText.length, bounds)
+                val textWidth = bounds.width()
+                val textHeight = bounds.height()
+                canvas.drawRect(
+                    left,
+                    top,
+                    left + textWidth + BOUNDING_RECT_TEXT_PADDING,
+                    top + textHeight + BOUNDING_RECT_TEXT_PADDING,
+                    textBackgroundPaint
+                )
+                canvas.drawText(drawableText, left, top + bounds.height(), textPaint)
+                return@forEach
+            }
 
             val left = vehicle.x1 * 640f * scaleX
             val top = vehicle.y1 * 640f * scaleY
