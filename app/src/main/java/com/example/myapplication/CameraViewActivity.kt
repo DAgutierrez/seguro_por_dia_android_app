@@ -191,6 +191,14 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                     android.graphics.Bitmap.Config.ARGB_8888
                 )
                 imageProxy.use { bitmapBuffer.copyPixelsFromBuffer(imageProxy.planes[0].buffer) }
+
+                // Pasar rotación al overlay para mapear correctamente las boxes
+                runOnUiThread {
+                    binding.overlay.setRotationParams(
+                        rotationDegrees = imageProxy.imageInfo.rotationDegrees,
+                        isFrontCamera = isFrontCamera
+                    )
+                }
                 imageProxy.close()
 
                 val matrix = android.graphics.Matrix().apply {

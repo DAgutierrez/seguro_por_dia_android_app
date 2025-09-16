@@ -1,5 +1,6 @@
 package com.example.myapplication
 
+import android.content.ContentValues.TAG
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -7,6 +8,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.AttributeSet
+import android.util.Log
 import android.view.View
 import androidx.core.content.ContextCompat
 import java.util.LinkedList
@@ -25,6 +27,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var bounds = Rect()
     private var positioningHelper = VehiclePositioningHelper()
     private var currentInstruction = ""
+    private var rotationDegrees: Int = 0
+    private var isFrontCamera: Boolean = false
 
     init {
         initPaints()
@@ -76,6 +80,9 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     override fun draw(canvas: Canvas) {
         super.draw(canvas)
 
+        Log.d(TAG, "rotationDegrees: $rotationDegrees")
+            
+
         // Draw outer guide frame (amarillo)
         val guideFrame = positioningHelper.getGuideFrame(width, height)
         canvas.drawRect(guideFrame, guideFramePaint)
@@ -105,12 +112,23 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         // Update current instruction
         currentInstruction = bestPositioning?.instruction ?: ""
 
+
+
+
+        val scaleX = canvas.width.toFloat() / 640f
+        val scaleY = canvas.height.toFloat() / 640f
+
+        Log.d(TAG, "width:" + canvas.width.toFloat())
+        Log.d(TAG, "height:" +canvas.height.toFloat())
+
         // Draw vehicle bounding boxes
         results.forEach { vehicle ->
-            val left = vehicle.x1 * width
-            val top = vehicle.y1 * height
-            val right = vehicle.x2 * width
-            val bottom = vehicle.y2 * height
+
+
+            val left = vehicle.x1 * 640f * scaleX
+            val top = vehicle.y1 * 640f * scaleY
+            val right = vehicle.x2 * 640f * scaleX
+            val bottom = vehicle.y2 * 640f * scaleY
 
             canvas.drawRect(left, top, right, bottom, boxPaint)
             val drawableText = vehicle.clsName
@@ -154,6 +172,11 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     fun setResults(boundingBoxes: List<BoundingBox>) {
         results = boundingBoxes
         invalidate()
+    }
+
+    fun setRotationParams(rotationDegrees: Int, isFrontCamera: Boolean) {
+        this.rotationDegrees = ((rotationDegrees % 360) + 360) % 360
+        this.isFrontCamera = isFrontCamera
     }
 
     companion object {

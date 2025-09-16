@@ -1,8 +1,10 @@
 package com.example.myapplication
 
+import android.content.ContentValues.TAG
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.util.Log
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
@@ -124,6 +126,9 @@ class Detector(
         if (numElements == 0) return
 
         var inferenceTime = SystemClock.uptimeMillis()
+
+        Log.d(TAG, " tensor width: $tensorWidth")
+        Log.d(TAG, " tensor height: $tensorHeight")
 
         val resizedBitmap = Bitmap.createScaledBitmap(frame, tensorWidth, tensorHeight, false)
 
