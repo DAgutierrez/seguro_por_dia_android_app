@@ -29,6 +29,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
     private lateinit var zoomManager: CameraZoomManager
     private var isFlashOn = false
     private var camera: androidx.camera.core.Camera? = null
+    private var imageAnalyzerRef: ImageAnalysis? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -179,48 +180,55 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                 .build()
 
             imageAnalyzer.setAnalyzer(cameraExecutor) { imageProxy ->
-                if (detector == null) {
-                    Log.d(TAG, "Detector is null, skipping analysis")
-                    imageProxy.close()
-                    return@setAnalyzer
-                }
+                try {
+                    val localDetector = detector
+                    if (localDetector == null) {
+                        imageProxy.close()
+                        return@setAnalyzer
+                    }
 
-                val bitmapBuffer = android.graphics.Bitmap.createBitmap(
-                    imageProxy.width,
-                    imageProxy.height,
-                    android.graphics.Bitmap.Config.ARGB_8888
-                )
-                imageProxy.use { bitmapBuffer.copyPixelsFromBuffer(imageProxy.planes[0].buffer) }
-
-                // Pasar rotación al overlay para mapear correctamente las boxes
-                runOnUiThread {
-                    binding.overlay.setRotationParams(
-                        rotationDegrees = imageProxy.imageInfo.rotationDegrees,
-                        isFrontCamera = isFrontCamera
+                    val bitmapBuffer = android.graphics.Bitmap.createBitmap(
+                        imageProxy.width,
+                        imageProxy.height,
+                        android.graphics.Bitmap.Config.ARGB_8888
                     )
-                }
-                imageProxy.close()
+                    imageProxy.planes[0].buffer?.let { buffer ->
+                        bitmapBuffer.copyPixelsFromBuffer(buffer)
+                    }
 
-                val matrix = android.graphics.Matrix().apply {
-                    postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
-                    if (isFrontCamera) {
-                        postScale(
-                            -1f,
-                            1f,
-                            imageProxy.width.toFloat(),
-                            imageProxy.height.toFloat()
+                    runOnUiThread {
+                        binding.overlay.setRotationParams(
+                            rotationDegrees = imageProxy.imageInfo.rotationDegrees,
+                            isFrontCamera = isFrontCamera
                         )
                     }
+
+                    val matrix = android.graphics.Matrix().apply {
+                        postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
+                        if (isFrontCamera) {
+                            postScale(
+                                -1f,
+                                1f,
+                                imageProxy.width.toFloat(),
+                                imageProxy.height.toFloat()
+                            )
+                        }
+                    }
+
+                    val rotatedBitmap = android.graphics.Bitmap.createBitmap(
+                        bitmapBuffer, 0, 0, bitmapBuffer.width, bitmapBuffer.height,
+                        matrix, true
+                    )
+
+                    localDetector.detect(rotatedBitmap)
+                } catch (t: Throwable) {
+                    Log.e(TAG, "Analyzer error: ${t.message}", t)
+                } finally {
+                    try { imageProxy.close() } catch (_: Throwable) {}
                 }
-
-                val rotatedBitmap = android.graphics.Bitmap.createBitmap(
-                    bitmapBuffer, 0, 0, bitmapBuffer.width, bitmapBuffer.height,
-                    matrix, true
-                )
-
-                Log.d(TAG, "Calling detector.detect() directly")
-                detector?.detect(rotatedBitmap)
             }
+
+            imageAnalyzerRef = imageAnalyzer
 
             // Bind camera with our custom analyzer
             cameraProvider?.unbindAll()
@@ -269,8 +277,17 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
 
     override fun onDestroy() {
         super.onDestroy()
+        try { imageAnalyzerRef?.clearAnalyzer() } catch (_: Throwable) {}
         detector?.close()
         cameraExecutor.shutdown()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try {
+            imageAnalyzerRef?.clearAnalyzer()
+            cameraProvider?.unbindAll()
+        } catch (_: Throwable) {}
     }
 
     override fun onResume() {
