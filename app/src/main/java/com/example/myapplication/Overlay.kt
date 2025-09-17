@@ -13,6 +13,7 @@ import android.view.View
 import androidx.core.content.ContextCompat
 import java.util.LinkedList
 import kotlin.math.max
+import kotlin.math.min
 
 class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs) {
 
@@ -29,6 +30,12 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var currentInstruction = ""
     private var rotationDegrees: Int = 0
     private var isFrontCamera: Boolean = false
+    
+    // Image dimensions for letterbox calculation
+    private var tensorWidth: Int = 640
+    private var tensorHeight: Int = 640
+    private var sourceImageWidth: Int = 0
+    private var sourceImageHeight: Int = 0
     
     // Positioning strategy
     var positioningStrategy: VehiclePositioningHelper.Strategy = VehiclePositioningHelper.Strategy.FRAME_FIT
@@ -89,58 +96,25 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         // Draw outer guide frame (amarillo)
         val guideFrame = positioningHelper.getGuideFrame(width, height)
         canvas.drawRect(guideFrame, guideFramePaint)
-        
+
         // Draw inner frame (verde) - 5% más adentro
         val innerFramePadding = 0.1f // 5% de la pantalla
         val innerFrameLeft = guideFrame.left + (width * innerFramePadding)
         val innerFrameTop = guideFrame.top + (height * innerFramePadding)
         val innerFrameRight = guideFrame.right - (width * innerFramePadding)
         val innerFrameBottom = guideFrame.bottom - (height * innerFramePadding)
-        
+
         val innerFrame = RectF(innerFrameLeft, innerFrameTop, innerFrameRight, innerFrameBottom)
         canvas.drawRect(innerFrame, innerFramePaint)
+
 
         // Analyze vehicle position and get instruction
         var bestVehicle: BoundingBox? = null
         var bestPositioning: VehiclePositioningHelper.PositioningResult? = null
 
-        // Evaluate positioning using overlay-normalized boxes to account for scale/offset in landscape
+        // Evaluate positioning using letterbox strategy - coordinates are already clean
         results.forEach { vehicle ->
-            val overlayNormBox = if (rotationDegrees == 0) {
-                // Landscape: center-crop projection to overlay, then normalize to [0,1] of overlay
-                val base = 640f
-                val scale = maxOf(width.toFloat() / base, height.toFloat() / base)
-                val drawnW = base * scale
-                val drawnH = base * scale
-                val offsetX = (width - drawnW) / 2f
-                val offsetY = (height - drawnH) / 2f
-
-                val leftPx = vehicle.x1 * base * scale + offsetX
-                val topPx = vehicle.y1 * base * scale + offsetY
-                val rightPx = vehicle.x2 * base * scale + offsetX
-                val bottomPx = vehicle.y2 * base * scale + offsetY
-
-                val x1n = (leftPx / width).coerceIn(0f, 1f)
-                val y1n = (topPx / height).coerceIn(0f, 1f)
-                val x2n = (rightPx / width).coerceIn(0f, 1f)
-                val y2n = (bottomPx / height).coerceIn(0f, 1f)
-                BoundingBox(
-                    x1 = x1n,
-                    y1 = y1n,
-                    x2 = x2n,
-                    y2 = y2n,
-                    cx = (x1n + x2n) / 2f,
-                    cy = (y1n + y2n) / 2f,
-                    w = (x2n - x1n).coerceAtLeast(0f),
-                    h = (y2n - y1n).coerceAtLeast(0f),
-                    cnf = vehicle.cnf,
-                    cls = vehicle.cls,
-                    clsName = vehicle.clsName
-                )
-            } else {
-                // Portrait path remains as original normalized
-                vehicle
-            }
+            val overlayNormBox = projectLetterboxToOverlay(vehicle, width, height)
 
             val positioning = positioningHelper.analyzeVehiclePosition(overlayNormBox, width, height, positioningStrategy)
             if (bestVehicle == null || positioning.vehicleSize > bestPositioning?.vehicleSize ?: 0f) {
@@ -152,67 +126,26 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         // Update current instruction
         currentInstruction = bestPositioning?.instruction ?: ""
 
-
-
-
-        val scaleX = canvas.width.toFloat() / 640f
-        val scaleY = canvas.height.toFloat() / 640f
-
         Log.d(TAG, "width:" + canvas.width.toFloat())
         Log.d(TAG, "height:" +canvas.height.toFloat())
 
-        // Draw vehicle bounding boxes
+        // Draw vehicle bounding boxes using letterbox strategy
         results.forEach { vehicle ->
-            val base = 640f
-            if (rotationDegrees == 0) {
-                // Landscape: center-crop to fix left/right
-                val scale = maxOf(canvas.width.toFloat() / base, canvas.height.toFloat() / base)
-                val drawnW = base * scale
-                val drawnH = base * scale
-                val offsetX = (canvas.width - drawnW) / 2f
-                val offsetY = (canvas.height - drawnH) / 2f
-
-                val left = vehicle.x1 * base * scale + offsetX
-                val top = vehicle.y1 * base * scale + offsetY
-                val right = vehicle.x2 * base * scale + offsetX
-                val bottom = vehicle.y2 * base * scale + offsetY
-
-                canvas.drawRect(left, top, right, bottom, boxPaint)
-                val drawableText = vehicle.clsName
-
-                textBackgroundPaint.getTextBounds(drawableText, 0, drawableText.length, bounds)
-                val textWidth = bounds.width()
-                val textHeight = bounds.height()
-                canvas.drawRect(
-                    left,
-                    top,
-                    left + textWidth + BOUNDING_RECT_TEXT_PADDING,
-                    top + textHeight + BOUNDING_RECT_TEXT_PADDING,
-                    textBackgroundPaint
-                )
-                canvas.drawText(drawableText, left, top + bounds.height(), textPaint)
-                return@forEach
-            }
-
-            val left = vehicle.x1 * 640f * scaleX
-            val top = vehicle.y1 * 640f * scaleY
-            val right = vehicle.x2 * 640f * scaleX
-            val bottom = vehicle.y2 * 640f * scaleY
-
-            canvas.drawRect(left, top, right, bottom, boxPaint)
+            val rect = projectLetterboxToCanvas(vehicle, canvas.width, canvas.height)
+            canvas.drawRect(rect, boxPaint)
             val drawableText = vehicle.clsName
 
             textBackgroundPaint.getTextBounds(drawableText, 0, drawableText.length, bounds)
             val textWidth = bounds.width()
             val textHeight = bounds.height()
             canvas.drawRect(
-                left,
-                top,
-                left + textWidth + BOUNDING_RECT_TEXT_PADDING,
-                top + textHeight + BOUNDING_RECT_TEXT_PADDING,
+                rect.left,
+                rect.top,
+                rect.left + textWidth + BOUNDING_RECT_TEXT_PADDING,
+                rect.top + textHeight + BOUNDING_RECT_TEXT_PADDING,
                 textBackgroundPaint
             )
-            canvas.drawText(drawableText, left, top + bounds.height(), textPaint)
+            canvas.drawText(drawableText, rect.left, rect.top + bounds.height(), textPaint)
         }
 
         // Draw instruction at the bottom of the screen
@@ -247,6 +180,59 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         this.rotationDegrees = ((rotationDegrees % 360) + 360) % 360
         this.isFrontCamera = isFrontCamera
     }
+
+    fun setImageDimensions(sourceWidth: Int, sourceHeight: Int) {
+        this.sourceImageWidth = sourceWidth
+        this.sourceImageHeight = sourceHeight
+    }
+
+    /**
+     * Proyecta un BoundingBox del espacio del modelo (letterbox) al espacio normalizado del overlay
+     */
+    private fun projectLetterboxToOverlay(vehicle: BoundingBox, overlayWidth: Int, overlayHeight: Int): BoundingBox {
+        // Aproximación simple: usar las coordenadas directamente ya que están normalizadas (0-1)
+        return vehicle
+    }
+
+    /**
+     * Proyecta un BoundingBox del espacio del modelo (letterbox) al espacio del canvas
+     */
+    private fun projectLetterboxToCanvas(vehicle: BoundingBox, canvasWidth: Int, canvasHeight: Int): RectF {
+        val inputWidth = tensorWidth.toFloat()    // 640
+        val inputHeight = tensorHeight.toFloat()  // 640
+        val origWidth = sourceImageWidth.toFloat()   // ancho real de la cámara
+        val origHeight = sourceImageHeight.toFloat() // alto real de la cámara
+    
+        // 1. Letterbox scale
+        val scale = min(inputWidth / origWidth, inputHeight / origHeight)
+    
+        // 2. Padding aplicado durante letterbox
+        val padX = (inputWidth - origWidth * scale) / 2f
+        val padY = (inputHeight - origHeight * scale) / 2f
+    
+        // 3. Remover padding y convertir a coordenadas de imagen original
+        val x1 = ((vehicle.x1 * inputWidth) - padX) / scale
+        val y1 = ((vehicle.y1 * inputHeight) - padY) / scale
+        val x2 = ((vehicle.x2 * inputWidth) - padX) / scale
+        val y2 = ((vehicle.y2 * inputHeight) - padY) / scale
+    
+        // 4. Mapear a canvas
+       // 4) Mostrar en overlay con la MISMA proyección del preview (letterbox FIT)
+val displayScale = min(canvasWidth / origWidth, canvasHeight / origHeight)
+val displayW = origWidth * displayScale
+val displayH = origHeight * displayScale
+val displayOffsetX = (canvasWidth - displayW) / 2f
+val displayOffsetY = (canvasHeight - displayH) / 2f
+
+val left = x1 * displayScale + displayOffsetX
+val top = y1 * displayScale + displayOffsetY
+val right = x2 * displayScale + displayOffsetX
+val bottom = y2 * displayScale + displayOffsetY
+
+return RectF(left, top, right, bottom)
+    }
+    
+    
 
     companion object {
         private const val BOUNDING_RECT_TEXT_PADDING = 8

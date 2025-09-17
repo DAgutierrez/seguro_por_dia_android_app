@@ -3,6 +3,8 @@ package com.example.myapplication
 import android.content.ContentValues.TAG
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.os.SystemClock
 import android.util.Log
 import org.tensorflow.lite.DataType
@@ -130,7 +132,8 @@ class Detector(
         Log.d(TAG, " tensor width: $tensorWidth")
         Log.d(TAG, " tensor height: $tensorHeight")
 
-        val resizedBitmap = Bitmap.createScaledBitmap(frame, tensorWidth, tensorHeight, false)
+        // Usar letterbox strategy: escalar manteniendo aspect ratio y centrar
+        val resizedBitmap = createLetterboxBitmap(frame, tensorWidth, tensorHeight)
 
         val tensorImage = TensorImage(INPUT_IMAGE_TYPE)
         tensorImage.load(resizedBitmap)
@@ -246,6 +249,39 @@ class Detector(
     interface DetectorListener {
         fun onEmptyDetect()
         fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long)
+    }
+
+    /**
+     * Crea un bitmap con letterbox strategy: mantiene aspect ratio y centra la imagen
+     */
+    private fun createLetterboxBitmap(source: Bitmap, targetWidth: Int, targetHeight: Int): Bitmap {
+        val sourceWidth = source.width
+        val sourceHeight = source.height
+        
+        // Calcular escala para ajustar la imagen completa dentro del target
+        val scale = minOf(
+            targetWidth.toFloat() / sourceWidth,
+            targetHeight.toFloat() / sourceHeight
+        )
+        
+        val scaledWidth = (sourceWidth * scale).toInt()
+        val scaledHeight = (sourceHeight * scale).toInt()
+        
+        // Crear bitmap escalado
+        val scaledBitmap = Bitmap.createScaledBitmap(source, scaledWidth, scaledHeight, true)
+        
+        // Crear bitmap final con padding negro
+        val finalBitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(finalBitmap)
+        canvas.drawColor(Color.BLACK) // Fondo negro
+        
+        // Centrar la imagen escalada
+        val left = (targetWidth - scaledWidth) / 2f
+        val top = (targetHeight - scaledHeight) / 2f
+        canvas.drawBitmap(scaledBitmap, left, top, null)
+        
+        scaledBitmap.recycle()
+        return finalBitmap
     }
 
     companion object {

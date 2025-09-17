@@ -202,6 +202,10 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                             rotationDegrees = imageProxy.imageInfo.rotationDegrees,
                             isFrontCamera = isFrontCamera
                         )
+                        binding.overlay.setImageDimensions(
+                            sourceWidth = imageProxy.width,
+                            sourceHeight = imageProxy.height
+                        )
                     }
 
                     val matrix = android.graphics.Matrix().apply {
@@ -220,6 +224,17 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                         bitmapBuffer, 0, 0, bitmapBuffer.width, bitmapBuffer.height,
                         matrix, true
                     )
+
+                    // Pass rotated bitmap dimensions to overlay for accurate letterbox inverse mapping
+                    runOnUiThread {
+                        try {
+                            binding.overlay.setImageDimensions(
+                                sourceWidth = rotatedBitmap.width,
+                                sourceHeight = rotatedBitmap.height
+                            )
+                            Log.d(TAG, "Overlay image dims set: ${rotatedBitmap.width}x${rotatedBitmap.height}")
+                        } catch (_: Throwable) {}
+                    }
 
                     localDetector.detect(rotatedBitmap)
                 } catch (t: Throwable) {
