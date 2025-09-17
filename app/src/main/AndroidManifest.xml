@@ -28,7 +28,9 @@
         <activity
             android:name=".CameraViewActivity"
             android:exported="false"
-            android:theme="@style/Theme.YOLOv8TfLite" />
+            android:theme="@style/Theme.YOLOv8TfLite"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="unspecified" />
 
         <activity
             android:name=".CameraViewActivityOld"

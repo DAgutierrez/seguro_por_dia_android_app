@@ -2,6 +2,7 @@ package com.example.myapplication
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Log
 import android.view.MotionEvent
@@ -285,17 +286,50 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
     override fun onPause() {
         super.onPause()
         try {
+            // Solo limpiar el analyzer, no desvincular la cámara completamente
             imageAnalyzerRef?.clearAnalyzer()
-            cameraProvider?.unbindAll()
-        } catch (_: Throwable) {}
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onPause: ${e.message}")
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        if (allPermissionsGranted()){
-            startCamera()
-        } else {
-            requestPermissionLauncher.launch(REQUIRED_PERMISSIONS)
+        try {
+            // Reinicializar detector si es necesario
+            if (detector == null) {
+                initializeDetector()
+            }
+            
+            // Solo reiniciar cámara si no hay cámara activa
+            if (camera == null && allPermissionsGranted()) {
+                startCamera()
+            } else if (!allPermissionsGranted()) {
+                requestPermissionLauncher.launch(REQUIRED_PERMISSIONS)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onResume: ${e.message}")
+            showErrorDialog("Error reanudando cámara", e.message ?: "Error desconocido")
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        try {
+            Log.d(TAG, "Configuration changed, orientation: ${newConfig.orientation}")
+            
+            // Reiniciar la cámara para adaptarse al nuevo layout
+            if (allPermissionsGranted()) {
+                // Desvincular la cámara actual
+                cameraProvider?.unbindAll()
+                camera = null
+                
+                // Reiniciar la cámara con la nueva configuración
+                startCamera()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling configuration change: ${e.message}")
+            showErrorDialog("Error adaptando a nueva orientación", e.message ?: "Error desconocido")
         }
     }
 
