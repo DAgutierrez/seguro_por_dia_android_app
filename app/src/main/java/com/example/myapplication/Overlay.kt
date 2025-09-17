@@ -29,6 +29,9 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var currentInstruction = ""
     private var rotationDegrees: Int = 0
     private var isFrontCamera: Boolean = false
+    
+    // Positioning strategy
+    var positioningStrategy: VehiclePositioningHelper.Strategy = VehiclePositioningHelper.Strategy.FRAME_FIT
 
     init {
         initPaints()
@@ -139,7 +142,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
                 vehicle
             }
 
-            val positioning = positioningHelper.analyzeVehiclePosition(overlayNormBox, width, height)
+            val positioning = positioningHelper.analyzeVehiclePosition(overlayNormBox, width, height, positioningStrategy)
             if (bestVehicle == null || positioning.vehicleSize > bestPositioning?.vehicleSize ?: 0f) {
                 bestVehicle = overlayNormBox
                 bestPositioning = positioning

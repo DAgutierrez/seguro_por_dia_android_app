@@ -17,12 +17,29 @@ class VehiclePositioningHelper {
         val vehicleSize: Float,
         val isCentered: Boolean
     )
+
+    enum class Strategy {
+        ADVANCED,
+        FRAME_FIT
+    }
     
     /**
      * Analiza la posición del vehículo y retorna la instrucción correspondiente
      * Implementa la nueva lógica mejorada con detección de lados específicos
      */
-    fun analyzeVehiclePosition(vehicle: BoundingBox, screenWidth: Int, screenHeight: Int): PositioningResult {
+    fun analyzeVehiclePosition(
+        vehicle: BoundingBox,
+        screenWidth: Int,
+        screenHeight: Int,
+        strategy: Strategy = Strategy.ADVANCED
+    ): PositioningResult {
+        return when (strategy) {
+            Strategy.ADVANCED -> analyzeAdvanced(vehicle)
+            Strategy.FRAME_FIT -> analyzeFrameFit(vehicle)
+        }
+    }
+
+    private fun analyzeAdvanced(vehicle: BoundingBox): PositioningResult {
         // Calcular el frame guía (exterior)
         val guideFrameLeft = FRAME_PADDING_PERCENT
         val guideFrameTop = FRAME_PADDING_PERCENT
@@ -106,6 +123,99 @@ class VehiclePositioningHelper {
             isVehicleInFrame = true,
             vehicleSize = maxOf(vehicle.w, vehicle.h),
             isCentered = instructions.isEmpty()
+        )
+    }
+
+    /**
+     * Estrategia FRAME_FIT: dar instrucciones para encuadrar el vehículo entre las dos guías
+     * (outer e inner). El objetivo es que el vehículo esté completamente dentro del marco exterior
+     * pero fuera del marco interior, centrado entre ambos.
+     */
+    private fun analyzeFrameFit(vehicle: BoundingBox): PositioningResult {
+        val outer = RectF(
+            FRAME_PADDING_PERCENT,
+            FRAME_PADDING_PERCENT,
+            1f - FRAME_PADDING_PERCENT,
+            1f - FRAME_PADDING_PERCENT
+        )
+        val inner = RectF(
+            INNER_FRAME_PADDING_PERCENT,
+            INNER_FRAME_PADDING_PERCENT,
+            1f - INNER_FRAME_PADDING_PERCENT,
+            1f - INNER_FRAME_PADDING_PERCENT
+        )
+
+        val messages = mutableListOf<String>()
+
+        // Verificar si está completamente dentro del marco exterior
+        val isInsideOuter = vehicle.x1 >= outer.left && vehicle.x2 <= outer.right && 
+                           vehicle.y1 >= outer.top && vehicle.y2 <= outer.bottom
+
+        // Verificar si está completamente fuera del marco interior
+        val isOutsideInner = vehicle.x1 <= inner.left || vehicle.x2 >= inner.right || 
+                            vehicle.y1 <= inner.top || vehicle.y2 >= inner.bottom
+
+        if (!isInsideOuter) {
+            // Prioridad: meter dentro del marco exterior
+            val sidesOutside = mutableListOf<String>()
+            if (vehicle.x1 < outer.left) sidesOutside.add("izquierda")
+            if (vehicle.x2 > outer.right) sidesOutside.add("derecha")
+            if (vehicle.y1 < outer.top) sidesOutside.add("arriba")
+            if (vehicle.y2 > outer.bottom) sidesOutside.add("abajo")
+            
+            if (sidesOutside.size >= 2) {
+                messages.add("Aléjate")
+            } else {
+                // Dar instrucciones específicas si solo un lado sale
+                if (vehicle.x1 < outer.left) messages.add("Muévete a la derecha")
+                if (vehicle.x2 > outer.right) messages.add("Muévete a la izquierda")
+                if (vehicle.y1 < outer.top) messages.add("Muévete más abajo")
+                if (vehicle.y2 > outer.bottom) messages.add("Muévete más arriba")
+            }
+        } else if (!isOutsideInner) {
+            // Si está dentro del exterior pero también dentro del interior, sacarlo
+            val isCompletelyInsideInner = vehicle.x1 >= inner.left && vehicle.x2 <= inner.right && 
+                                         vehicle.y1 >= inner.top && vehicle.y2 <= inner.bottom
+            
+            if (isCompletelyInsideInner) {
+                // Si está completamente dentro del marco interior, indicar acercarse
+                messages.add("Acércate")
+            } else {
+                // Si está parcialmente dentro del marco interior, sacarlo
+                if (vehicle.x1 >= inner.left && vehicle.x2 <= inner.right) {
+                    // Está completamente dentro horizontalmente, mover hacia los lados
+                    val leftDistance = vehicle.x1 - inner.left
+                    val rightDistance = inner.right - vehicle.x2
+                    if (leftDistance < rightDistance) {
+                        messages.add("Muévete a la izquierda")
+                    } else {
+                        messages.add("Muévete a la derecha")
+                    }
+                }
+                if (vehicle.y1 >= inner.top && vehicle.y2 <= inner.bottom) {
+                    // Está completamente dentro verticalmente, mover hacia arriba/abajo
+                    val topDistance = vehicle.y1 - inner.top
+                    val bottomDistance = inner.bottom - vehicle.y2
+                    if (topDistance < bottomDistance) {
+                        messages.add("Muévete más arriba")
+                    } else {
+                        messages.add("Muévete más abajo")
+                    }
+                }
+            }
+        } else {
+            // Está en la zona correcta: dentro del exterior pero fuera del interior
+            messages.add("Posición correcta")
+        }
+
+        val instruction = messages.distinct().joinToString(", ")
+        val isCorrectPosition = isInsideOuter && isOutsideInner
+
+        return PositioningResult(
+            instruction = instruction,
+            isVehicleInFrame = isCorrectPosition,
+            vehicleSize = maxOf(vehicle.w, vehicle.h),
+            isCentered = isCorrectPosition
         )
     }
     
