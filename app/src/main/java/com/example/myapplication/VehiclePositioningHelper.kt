@@ -2,6 +2,7 @@ package com.example.myapplication
 
 import android.graphics.RectF
 import kotlin.math.abs
+import kotlin.math.min
 
 class VehiclePositioningHelper {
     
@@ -81,20 +82,21 @@ class VehiclePositioningHelper {
         }
         
         // 2. Verificar Distancia Adelante/Atrás
-        if (isInInnerFrame) {
-            return PositioningResult(
-                instruction = "Acércate",
-                isVehicleInFrame = true,
-                vehicleSize = maxOf(vehicle.w, vehicle.h),
-                isCentered = false
-            )
-        }
-        
         // Verificar si sale del frame guía con al menos dos lados
         if (sidesOutOfGuideFrame.count() >= 2) {
             return PositioningResult(
                 instruction = "Aléjate",
                 isVehicleInFrame = false,
+                vehicleSize = maxOf(vehicle.w, vehicle.h),
+                isCentered = false
+            )
+        }
+        
+        // Si está dentro del inner frame, indicar acercarse
+        if (isInInnerFrame) {
+            return PositioningResult(
+                instruction = "Acércate",
+                isVehicleInFrame = true,
                 vehicleSize = maxOf(vehicle.w, vehicle.h),
                 isCentered = false
             )
@@ -307,17 +309,38 @@ class VehiclePositioningHelper {
     }
     
     /**
-     * Retorna el frame guía para dibujar en el overlay
+     * Retorna el frame guía para dibujar en el overlay, ajustado al área visible de la cámara
      */
-    fun getGuideFrame(screenWidth: Int, screenHeight: Int): RectF {
-        val paddingX = screenWidth * FRAME_PADDING_PERCENT
-        val paddingY = screenHeight * FRAME_PADDING_PERCENT
+    fun getGuideFrame(screenWidth: Int, screenHeight: Int, sourceImageWidth: Int = 0, sourceImageHeight: Int = 0): RectF {
+        // Si no tenemos dimensiones de la imagen, usar el método original
+        if (sourceImageWidth == 0 || sourceImageHeight == 0) {
+            val paddingX = screenWidth * FRAME_PADDING_PERCENT
+            val paddingY = screenHeight * FRAME_PADDING_PERCENT
+            
+            return RectF(
+                paddingX,
+                paddingY,
+                screenWidth - paddingX,
+                screenHeight - paddingY
+            )
+        }
+        
+        // Calcular el área visible de la cámara (letterbox)
+        val displayScale = min(screenWidth.toFloat() / sourceImageWidth, screenHeight.toFloat() / sourceImageHeight)
+        val displayW = sourceImageWidth * displayScale
+        val displayH = sourceImageHeight * displayScale
+        val displayOffsetX = (screenWidth - displayW) / 2f
+        val displayOffsetY = (screenHeight - displayH) / 2f
+        
+        // Calcular padding dentro del área visible
+        val paddingX = displayW * FRAME_PADDING_PERCENT
+        val paddingY = displayH * FRAME_PADDING_PERCENT
         
         return RectF(
-            paddingX,
-            paddingY,
-            screenWidth - paddingX,
-            screenHeight - paddingY
+            displayOffsetX + paddingX,
+            displayOffsetY + paddingY,
+            displayOffsetX + displayW - paddingX,
+            displayOffsetY + displayH - paddingY
         )
     }
 }

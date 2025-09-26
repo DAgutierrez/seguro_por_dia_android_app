@@ -38,7 +38,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var sourceImageHeight: Int = 0
     
     // Positioning strategy
-    var positioningStrategy: VehiclePositioningHelper.Strategy = VehiclePositioningHelper.Strategy.FRAME_FIT
+    var positioningStrategy: VehiclePositioningHelper.Strategy = VehiclePositioningHelper.Strategy.ADVANCED
 
     init {
         initPaints()
@@ -93,16 +93,18 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         Log.d(TAG, "rotationDegrees: $rotationDegrees")
             
 
-        // Draw outer guide frame (amarillo)
-        val guideFrame = positioningHelper.getGuideFrame(width, height)
+        // Draw outer guide frame (amarillo) - ajustado al área visible de la cámara
+        val guideFrame = positioningHelper.getGuideFrame(width, height, sourceImageWidth, sourceImageHeight)
         canvas.drawRect(guideFrame, guideFramePaint)
 
-        // Draw inner frame (verde) - 5% más adentro
-        val innerFramePadding = 0.1f // 5% de la pantalla
-        val innerFrameLeft = guideFrame.left + (width * innerFramePadding)
-        val innerFrameTop = guideFrame.top + (height * innerFramePadding)
-        val innerFrameRight = guideFrame.right - (width * innerFramePadding)
-        val innerFrameBottom = guideFrame.bottom - (height * innerFramePadding)
+        // Draw inner frame (verde) - 5% más adentro del guide frame
+        val innerFramePadding = 0.1f // 10% del guide frame
+        val guideFrameWidth = guideFrame.right - guideFrame.left
+        val guideFrameHeight = guideFrame.bottom - guideFrame.top
+        val innerFrameLeft = guideFrame.left + (guideFrameWidth * innerFramePadding)
+        val innerFrameTop = guideFrame.top + (guideFrameHeight * innerFramePadding)
+        val innerFrameRight = guideFrame.right - (guideFrameWidth * innerFramePadding)
+        val innerFrameBottom = guideFrame.bottom - (guideFrameHeight * innerFramePadding)
 
         val innerFrame = RectF(innerFrameLeft, innerFrameTop, innerFrameRight, innerFrameBottom)
         canvas.drawRect(innerFrame, innerFramePaint)
