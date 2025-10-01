@@ -31,11 +31,16 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
     private var isFlashOn = false
     private var camera: androidx.camera.core.Camera? = null
     private var imageAnalyzerRef: ImageAnalysis? = null
+    private var lastRotatedBitmap: android.graphics.Bitmap? = null
+    private var captureMode: Boolean = false
+    private var captureSlot: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityCameraViewBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        captureMode = intent.getBooleanExtra("captureMode", false)
+        captureSlot = intent.getStringExtra("slot")
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
@@ -96,6 +101,34 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
 
             // GPU is enabled by default
             Log.d(TAG, "GPU acceleration enabled by default")
+
+            if (captureMode) {
+                captureButton.setOnClickListener {
+                    try {
+                        val bmp = lastRotatedBitmap ?: return@setOnClickListener
+                        val stream = java.io.ByteArrayOutputStream()
+                        bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
+                        val bytes = stream.toByteArray()
+                        Executors.newSingleThreadExecutor().execute {
+                            try {
+                                val url = SupabaseClientProvider.uploadPng(bytes, pathPrefix = captureSlot ?: "")
+                                runOnUiThread {
+                                    val result = android.content.Intent().apply {
+                                        putExtra("uploadedUrl", url)
+                                        putExtra("slot", captureSlot)
+                                    }
+                                    setResult(android.app.Activity.RESULT_OK, result)
+                                    finish()
+                                }
+                            } catch (t: Throwable) {
+                                Log.e(TAG, "Upload failed: ${t.message}")
+                            }
+                        }
+                    } catch (t: Throwable) {
+                        Log.e(TAG, "Capture failed: ${t.message}")
+                    }
+                }
+            }
         }
     }
 
@@ -224,6 +257,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                         bitmapBuffer, 0, 0, bitmapBuffer.width, bitmapBuffer.height,
                         matrix, true
                     )
+                    lastRotatedBitmap = rotatedBitmap
 
                     // Pass rotated bitmap dimensions to overlay for accurate letterbox inverse mapping
                     runOnUiThread {

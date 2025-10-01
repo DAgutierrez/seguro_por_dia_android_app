@@ -61,6 +61,20 @@
             android:drawableStart="@drawable/ic_camera_list"
             android:drawablePadding="16dp" />
 
+        <!-- Inspection Button -->
+        <Button
+            android:id="@+id/btn_inspection"
+            android:layout_width="match_parent"
+            android:layout_height="80dp"
+            android:text="🧾 Inspección Vehicular"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/camera_button_background"
+            android:drawableStart="@drawable/ic_camera_list"
+            android:drawablePadding="16dp" />
+
     </LinearLayout>
 
     <!-- App Info -->

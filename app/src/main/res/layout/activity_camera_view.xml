@@ -159,13 +159,15 @@
                 android:contentDescription="@string/switch_camera"
                 android:layout_marginEnd="24dp" />
 
-            <!-- Center Space -->
-            <View
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
-
-           
+            <!-- Capture Button -->
+            <ImageButton
+                android:id="@+id/capture_button"
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:background="@drawable/camera_button_background"
+                android:src="@drawable/ic_camera"
+                android:contentDescription="Capturar"
+                android:layout_marginHorizontal="8dp"/>
 
         </LinearLayout>
 

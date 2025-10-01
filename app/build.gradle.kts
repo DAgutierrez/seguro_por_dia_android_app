@@ -18,6 +18,8 @@ android {
 
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "SUPABASE_URL", "\"https://vlbdporkjtogegumkgnk.supabase.co\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZsYmRwb3JranRvZ2VndW1rZ25rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ2ODA4MTQsImV4cCI6MjA2MDI1NjgxNH0.o8jYc7kysOq7qVV7W8wCHtIw_ioRnZMKCW2AJIWo9uo\"")
     }
 
     buildTypes {
@@ -39,6 +41,7 @@ android {
     buildFeatures {
         compose = true
         viewBinding =  true
+        buildConfig = true
     }
 }
 
@@ -81,5 +84,9 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    // Networking and image loading
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.github.bumptech.glide:glide:4.16.0")
 
 }

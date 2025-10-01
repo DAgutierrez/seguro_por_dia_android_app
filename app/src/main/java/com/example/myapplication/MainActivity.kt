@@ -27,5 +27,11 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(this@MainActivity, CameraListActivity::class.java)
             startActivity(intent)
         }
+
+        // Inspection Button (reusing camera list button if not present in layout)
+        findViewById<Button?>(R.id.btn_inspection)?.setOnClickListener {
+            val intent = Intent(this@MainActivity, InspectionActivity::class.java)
+            startActivity(intent)
+        }
     }
 }
