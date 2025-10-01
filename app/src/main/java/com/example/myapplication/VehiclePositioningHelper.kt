@@ -32,27 +32,28 @@ class VehiclePositioningHelper {
         vehicle: BoundingBox,
         screenWidth: Int,
         screenHeight: Int,
-        strategy: Strategy = Strategy.ADVANCED
+        strategy: Strategy = Strategy.ADVANCED,
+        sourceImageWidth: Int = 0,
+        sourceImageHeight: Int = 0
     ): PositioningResult {
         return when (strategy) {
-            Strategy.ADVANCED -> analyzeAdvanced(vehicle)
-            Strategy.FRAME_FIT -> analyzeFrameFit(vehicle)
+            Strategy.ADVANCED -> analyzeAdvanced(vehicle, screenWidth, screenHeight, sourceImageWidth, sourceImageHeight)
+            Strategy.FRAME_FIT -> analyzeFrameFit(vehicle, screenWidth, screenHeight, sourceImageWidth, sourceImageHeight)
         }
     }
 
-    private fun analyzeAdvanced(vehicle: BoundingBox): PositioningResult {
-        // Calcular el frame guía (exterior)
-        val guideFrameLeft = FRAME_PADDING_PERCENT
-        val guideFrameTop = FRAME_PADDING_PERCENT
-        val guideFrameRight = 1f - FRAME_PADDING_PERCENT
-        val guideFrameBottom = 1f - FRAME_PADDING_PERCENT
-        val guideFrame = RectF(guideFrameLeft, guideFrameTop, guideFrameRight, guideFrameBottom)
+    private fun analyzeAdvanced(vehicle: BoundingBox, screenWidth: Int, screenHeight: Int, sourceImageWidth: Int, sourceImageHeight: Int): PositioningResult {
+        // Obtener el frame guía en coordenadas normalizadas
+        val guideFrame = getGuideFrameNormalized(screenWidth, screenHeight, sourceImageWidth, sourceImageHeight)
         
-        // Calcular el frame interno (interior)
-        val innerFrameLeft = INNER_FRAME_PADDING_PERCENT
-        val innerFrameTop = INNER_FRAME_PADDING_PERCENT
-        val innerFrameRight = 1f - INNER_FRAME_PADDING_PERCENT
-        val innerFrameBottom = 1f - INNER_FRAME_PADDING_PERCENT
+        // Calcular el frame interno (interior) - 10% más adentro del guide frame
+        val innerFramePadding = 0.1f // 10% del guide frame
+        val guideFrameWidth = guideFrame.right - guideFrame.left
+        val guideFrameHeight = guideFrame.bottom - guideFrame.top
+        val innerFrameLeft = guideFrame.left + (guideFrameWidth * innerFramePadding)
+        val innerFrameTop = guideFrame.top + (guideFrameHeight * innerFramePadding)
+        val innerFrameRight = guideFrame.right - (guideFrameWidth * innerFramePadding)
+        val innerFrameBottom = guideFrame.bottom - (guideFrameHeight * innerFramePadding)
         val innerFrame = RectF(innerFrameLeft, innerFrameTop, innerFrameRight, innerFrameBottom)
         
         // Calcular centros de los frames
@@ -66,13 +67,15 @@ class VehiclePositioningHelper {
         // Analizar qué lados del vehículo salen del frame guía
         val sidesOutOfGuideFrame = analyzeSidesOutOfFrame(vehicle, guideFrame)
         
-        // 1. Verificar Estado Perfecto
+        // Calcular estados de posición
         val isInGuideFrame = isVehicleInFrame(vehicle, guideFrame)
         val isInInnerFrame = isVehicleInFrame(vehicle, innerFrame)
         val isHorizontallyCentered = abs(vehicleCenterX - innerFrameCenterX) <= CENTER_THRESHOLD
         val isVerticallyCentered = abs(vehicleCenterY - innerFrameCenterY) <= CENTER_THRESHOLD
         
-        if (isInGuideFrame && isInInnerFrame && isHorizontallyCentered && isVerticallyCentered) {
+        // 1. Estado Perfecto: Entre ambos frames y centrado
+        val isBetweenFrames = isInGuideFrame && !isInInnerFrame
+        if (isBetweenFrames && isHorizontallyCentered && isVerticallyCentered) {
             return PositioningResult(
                 instruction = "Posición correcta",
                 isVehicleInFrame = true,
@@ -81,18 +84,8 @@ class VehiclePositioningHelper {
             )
         }
         
-        // 2. Verificar Distancia Adelante/Atrás
-        // Verificar si sale del frame guía con al menos dos lados
-        if (sidesOutOfGuideFrame.count() >= 2) {
-            return PositioningResult(
-                instruction = "Aléjate",
-                isVehicleInFrame = false,
-                vehicleSize = maxOf(vehicle.w, vehicle.h),
-                isCentered = false
-            )
-        }
-        
-        // Si está dentro del inner frame, indicar acercarse
+        // 2. Distancia Adelante/Atrás
+        // Si está completamente dentro del inner frame
         if (isInInnerFrame) {
             return PositioningResult(
                 instruction = "Acércate",
@@ -102,12 +95,22 @@ class VehiclePositioningHelper {
             )
         }
         
-        // 3. Verificar Alineación Horizontal (incluye casos de salida por un lado)
+        // Si sale del frame guía con al menos dos lados
+        if (sidesOutOfGuideFrame.count() >= 2) {
+            return PositioningResult(
+                instruction = "Aléjate",
+                isVehicleInFrame = false,
+                vehicleSize = maxOf(vehicle.w, vehicle.h),
+                isCentered = false
+            )
+        }
+        
+        // 3. Alineación Horizontal (incluye casos de salida por un lado)
         val horizontalInstruction = checkHorizontalAlignmentWithSides(
             vehicleCenterX, innerFrameCenterX, sidesOutOfGuideFrame
         )
         
-        // 4. Verificar Alineación Vertical (incluye casos de salida por un lado)
+        // 4. Alineación Vertical (incluye casos de salida por un lado)
         val verticalInstruction = checkVerticalAlignmentWithSides(
             vehicleCenterY, innerFrameCenterY, sidesOutOfGuideFrame
         )
@@ -133,19 +136,19 @@ class VehiclePositioningHelper {
      * (outer e inner). El objetivo es que el vehículo esté completamente dentro del marco exterior
      * pero fuera del marco interior, centrado entre ambos.
      */
-    private fun analyzeFrameFit(vehicle: BoundingBox): PositioningResult {
-        val outer = RectF(
-            FRAME_PADDING_PERCENT,
-            FRAME_PADDING_PERCENT,
-            1f - FRAME_PADDING_PERCENT,
-            1f - FRAME_PADDING_PERCENT
-        )
-        val inner = RectF(
-            INNER_FRAME_PADDING_PERCENT,
-            INNER_FRAME_PADDING_PERCENT,
-            1f - INNER_FRAME_PADDING_PERCENT,
-            1f - INNER_FRAME_PADDING_PERCENT
-        )
+    private fun analyzeFrameFit(vehicle: BoundingBox, screenWidth: Int, screenHeight: Int, sourceImageWidth: Int, sourceImageHeight: Int): PositioningResult {
+        // Obtener el frame guía en coordenadas normalizadas
+        val outer = getGuideFrameNormalized(screenWidth, screenHeight, sourceImageWidth, sourceImageHeight)
+        
+        // Calcular el frame interno (interior) - 10% más adentro del guide frame
+        val innerFramePadding = 0.1f // 10% del guide frame
+        val guideFrameWidth = outer.right - outer.left
+        val guideFrameHeight = outer.bottom - outer.top
+        val innerLeft = outer.left + (guideFrameWidth * innerFramePadding)
+        val innerTop = outer.top + (guideFrameHeight * innerFramePadding)
+        val innerRight = outer.right - (guideFrameWidth * innerFramePadding)
+        val innerBottom = outer.bottom - (guideFrameHeight * innerFramePadding)
+        val inner = RectF(innerLeft, innerTop, innerRight, innerBottom)
 
         val messages = mutableListOf<String>()
 
@@ -199,9 +202,9 @@ class VehiclePositioningHelper {
                     val topDistance = vehicle.y1 - inner.top
                     val bottomDistance = inner.bottom - vehicle.y2
                     if (topDistance < bottomDistance) {
-                        messages.add("Muévete más arriba")
-                    } else {
                         messages.add("Muévete más abajo")
+                    } else {
+                        messages.add("Muévete más arriba")
                     }
                 }
             }
@@ -342,5 +345,29 @@ class VehiclePositioningHelper {
             displayOffsetX + displayW - paddingX,
             displayOffsetY + displayH - paddingY
         )
+    }
+    
+    /**
+     * Retorna el frame guía en coordenadas normalizadas (0-1) para análisis de posicionamiento
+     */
+    private fun getGuideFrameNormalized(screenWidth: Int, screenHeight: Int, sourceImageWidth: Int, sourceImageHeight: Int): RectF {
+        // Calcular el área visible de la cámara (letterbox)
+        val displayScale = min(screenWidth.toFloat() / sourceImageWidth, screenHeight.toFloat() / sourceImageHeight)
+        val displayW = sourceImageWidth * displayScale
+        val displayH = sourceImageHeight * displayScale
+        val displayOffsetX = (screenWidth - displayW) / 2f
+        val displayOffsetY = (screenHeight - displayH) / 2f
+        
+        // Calcular padding dentro del área visible
+        val paddingX = displayW * FRAME_PADDING_PERCENT
+        val paddingY = displayH * FRAME_PADDING_PERCENT
+        
+        // Convertir a coordenadas normalizadas (0-1)
+        val left = (displayOffsetX + paddingX) / screenWidth
+        val top = (displayOffsetY + paddingY) / screenHeight
+        val right = (displayOffsetX + displayW - paddingX) / screenWidth
+        val bottom = (displayOffsetY + displayH - paddingY) / screenHeight
+        
+        return RectF(left, top, right, bottom)
     }
 }

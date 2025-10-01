@@ -114,13 +114,14 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         var bestVehicle: BoundingBox? = null
         var bestPositioning: VehiclePositioningHelper.PositioningResult? = null
 
-        // Evaluate positioning using letterbox strategy - coordinates are already clean
+        // Evaluate positioning using letterbox strategy - convert vehicle coordinates to pixels
         results.forEach { vehicle ->
-            val overlayNormBox = projectLetterboxToOverlay(vehicle, width, height)
-
-            val positioning = positioningHelper.analyzeVehiclePosition(overlayNormBox, width, height, positioningStrategy)
+            // Convert normalized vehicle coordinates to pixel coordinates for positioning analysis
+            val vehicleInPixels = convertNormalizedToPixels(vehicle, width, height)
+            
+            val positioning = positioningHelper.analyzeVehiclePosition(vehicleInPixels, width, height, positioningStrategy, sourceImageWidth, sourceImageHeight)
             if (bestVehicle == null || positioning.vehicleSize > bestPositioning?.vehicleSize ?: 0f) {
-                bestVehicle = overlayNormBox
+                bestVehicle = vehicleInPixels
                 bestPositioning = positioning
             }
         }
@@ -194,6 +195,67 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private fun projectLetterboxToOverlay(vehicle: BoundingBox, overlayWidth: Int, overlayHeight: Int): BoundingBox {
         // Aproximación simple: usar las coordenadas directamente ya que están normalizadas (0-1)
         return vehicle
+    }
+
+    /**
+     * Convierte coordenadas normalizadas (0-1) a coordenadas en píxeles para análisis de posicionamiento
+     */
+    private fun convertNormalizedToPixels(vehicle: BoundingBox, overlayWidth: Int, overlayHeight: Int): BoundingBox {
+        val inputWidth = tensorWidth.toFloat()    // 640
+        val inputHeight = tensorHeight.toFloat()  // 640
+        val origWidth = sourceImageWidth.toFloat()   // ancho real de la cámara
+        val origHeight = sourceImageHeight.toFloat() // alto real de la cámara
+
+        // 1. Letterbox scale
+        val scale = min(inputWidth / origWidth, inputHeight / origHeight)
+
+        // 2. Padding aplicado durante letterbox
+        val padX = (inputWidth - origWidth * scale) / 2f
+        val padY = (inputHeight - origHeight * scale) / 2f
+
+        // 3. Remover padding y convertir a coordenadas de imagen original
+        val x1 = ((vehicle.x1 * inputWidth) - padX) / scale
+        val y1 = ((vehicle.y1 * inputHeight) - padY) / scale
+        val x2 = ((vehicle.x2 * inputWidth) - padX) / scale
+        val y2 = ((vehicle.y2 * inputHeight) - padY) / scale
+
+        // 4. Mapear a overlay (usando la misma proyección que el canvas)
+        val displayScale = min(overlayWidth / origWidth, overlayHeight / origHeight)
+        val displayW = origWidth * displayScale
+        val displayH = origHeight * displayScale
+        val displayOffsetX = (overlayWidth - displayW) / 2f
+        val displayOffsetY = (overlayHeight - displayH) / 2f
+
+        val pixelX1 = x1 * displayScale + displayOffsetX
+        val pixelY1 = y1 * displayScale + displayOffsetY
+        val pixelX2 = x2 * displayScale + displayOffsetX
+        val pixelY2 = y2 * displayScale + displayOffsetY
+
+        // Convertir a coordenadas normalizadas (0-1) respecto al overlay
+        val normX1 = pixelX1 / overlayWidth
+        val normY1 = pixelY1 / overlayHeight
+        val normX2 = pixelX2 / overlayWidth
+        val normY2 = pixelY2 / overlayHeight
+
+        // Calcular parámetros adicionales del BoundingBox
+        val cx = (normX1 + normX2) / 2f
+        val cy = (normY1 + normY2) / 2f
+        val w = normX2 - normX1
+        val h = normY2 - normY1
+        
+        return BoundingBox(
+            x1 = normX1,
+            y1 = normY1,
+            x2 = normX2,
+            y2 = normY2,
+            cx = cx,
+            cy = cy,
+            w = w,
+            h = h,
+            cnf = vehicle.cnf,
+            cls = vehicle.cls,
+            clsName = vehicle.clsName
+        )
     }
 
     /**

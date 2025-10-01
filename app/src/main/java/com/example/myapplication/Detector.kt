@@ -241,7 +241,7 @@ class Detector(
 
     private fun isVehicle(className: String): Boolean {
         return when (className.lowercase()) {
-            "car", "motorcycle", "bus", "truck" -> true
+            "car", "motorcycle" -> true
             else -> false
         }
     }
