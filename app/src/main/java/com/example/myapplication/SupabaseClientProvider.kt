@@ -20,11 +20,15 @@ object SupabaseClientProvider {
             .url(url)
             .addHeader("Authorization", "Bearer ${BuildConfig.SUPABASE_ANON_KEY}")
             .addHeader("apikey", BuildConfig.SUPABASE_ANON_KEY)
+            .addHeader("x-upsert", "true")
             .post(body)
             .build()
 
         httpClient.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IllegalStateException("Upload failed: ${resp.code}")
+            if (!resp.isSuccessful) {
+                val err = try { resp.body?.string() } catch (_: Throwable) { null }
+                throw IllegalStateException("Upload failed: ${resp.code} ${err ?: "(no body)"}")
+            }
         }
 
         // Public URL format

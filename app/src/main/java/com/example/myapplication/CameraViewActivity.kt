@@ -105,7 +105,13 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
             if (captureMode) {
                 captureButton.setOnClickListener {
                     try {
-                        val bmp = lastRotatedBitmap ?: return@setOnClickListener
+                        val bmp = lastRotatedBitmap
+                        if (bmp == null) {
+                            android.widget.Toast.makeText(this@CameraViewActivity, "Preparando cámara... intenta de nuevo", android.widget.Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                        captureButton.isEnabled = false
+                        android.widget.Toast.makeText(this@CameraViewActivity, "Capturando...", android.widget.Toast.LENGTH_SHORT).show()
                         val stream = java.io.ByteArrayOutputStream()
                         bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
                         val bytes = stream.toByteArray()
@@ -118,14 +124,21 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                                         putExtra("slot", captureSlot)
                                     }
                                     setResult(android.app.Activity.RESULT_OK, result)
+                                    android.widget.Toast.makeText(this@CameraViewActivity, "Foto subida", android.widget.Toast.LENGTH_SHORT).show()
                                     finish()
                                 }
                             } catch (t: Throwable) {
                                 Log.e(TAG, "Upload failed: ${t.message}")
+                                runOnUiThread {
+                                    captureButton.isEnabled = true
+                                    android.widget.Toast.makeText(this@CameraViewActivity, "Error subiendo foto", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
                     } catch (t: Throwable) {
                         Log.e(TAG, "Capture failed: ${t.message}")
+                        captureButton.isEnabled = true
+                        android.widget.Toast.makeText(this@CameraViewActivity, "Error al capturar", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
             }
