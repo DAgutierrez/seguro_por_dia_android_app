@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.util.AttributeSet
+import android.content.res.TypedArray
 import android.util.Log
 import android.view.View
 import androidx.core.content.ContextCompat
@@ -38,10 +39,22 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var sourceImageHeight: Int = 0
     
     // Positioning strategy
-    var positioningStrategy: VehiclePositioningHelper.Strategy = VehiclePositioningHelper.Strategy.ADVANCED
+    var positioningStrategy: VehiclePositioningHelper.Strategy = VehiclePositioningHelper.Strategy.HYBRID
+
+    // Toggle to show/hide guide frames while keeping positioning logic active
+    var showGuideFrames: Boolean = false
 
     init {
         initPaints()
+        // Read custom attrs
+        if (attrs != null && context != null) {
+            val ta: TypedArray = context!!.obtainStyledAttributes(attrs, R.styleable.OverlayView)
+            try {
+                showGuideFrames = ta.getBoolean(R.styleable.OverlayView_showGuideFrames, false)
+            } finally {
+                ta.recycle()
+            }
+        }
     }
 
     fun clear() {
@@ -93,11 +106,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         Log.d(TAG, "rotationDegrees: $rotationDegrees")
             
 
-        // Draw outer guide frame (amarillo) - ajustado al área visible de la cámara
+        // Compute frames (always calculate for logic), draw only if enabled
         val guideFrame = positioningHelper.getGuideFrame(width, height, sourceImageWidth, sourceImageHeight)
-        canvas.drawRect(guideFrame, guideFramePaint)
-
-        // Draw inner frame (verde) - 5% más adentro del guide frame
         val innerFramePadding = 0.1f // 10% del guide frame
         val guideFrameWidth = guideFrame.right - guideFrame.left
         val guideFrameHeight = guideFrame.bottom - guideFrame.top
@@ -107,27 +117,35 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         val innerFrameBottom = guideFrame.bottom - (guideFrameHeight * innerFramePadding)
 
         val innerFrame = RectF(innerFrameLeft, innerFrameTop, innerFrameRight, innerFrameBottom)
-        canvas.drawRect(innerFrame, innerFramePaint)
+
+        if (showGuideFrames) {
+            canvas.drawRect(guideFrame, guideFramePaint)
+            canvas.drawRect(innerFrame, innerFramePaint)
+        }
 
 
-        // Analyze vehicle position and get instruction
+        // Analyze vehicle position and get instruction (skip if NONE)
         var bestVehicle: BoundingBox? = null
         var bestPositioning: VehiclePositioningHelper.PositioningResult? = null
 
-        // Evaluate positioning using letterbox strategy - convert vehicle coordinates to pixels
-        results.forEach { vehicle ->
-            // Convert normalized vehicle coordinates to pixel coordinates for positioning analysis
-            val vehicleInPixels = convertNormalizedToPixels(vehicle, width, height)
-            
-            val positioning = positioningHelper.analyzeVehiclePosition(vehicleInPixels, width, height, positioningStrategy, sourceImageWidth, sourceImageHeight)
-            if (bestVehicle == null || positioning.vehicleSize > bestPositioning?.vehicleSize ?: 0f) {
-                bestVehicle = vehicleInPixels
-                bestPositioning = positioning
+        if (positioningStrategy != VehiclePositioningHelper.Strategy.NONE) {
+            // Evaluate positioning using letterbox strategy - convert vehicle coordinates to pixels
+            results.forEach { vehicle ->
+                // Convert normalized vehicle coordinates to pixel coordinates for positioning analysis
+                val vehicleInPixels = convertNormalizedToPixels(vehicle, width, height)
+                
+                val positioning = positioningHelper.analyzeVehiclePosition(
+                    vehicleInPixels, width, height, positioningStrategy, sourceImageWidth, sourceImageHeight
+                )
+                if (bestVehicle == null || positioning.vehicleSize > bestPositioning?.vehicleSize ?: 0f) {
+                    bestVehicle = vehicleInPixels
+                    bestPositioning = positioning
+                }
             }
         }
 
         // Update current instruction
-        currentInstruction = bestPositioning?.instruction ?: ""
+        currentInstruction = if (positioningStrategy == VehiclePositioningHelper.Strategy.NONE) "" else bestPositioning?.instruction ?: ""
 
         Log.d(TAG, "width:" + canvas.width.toFloat())
         Log.d(TAG, "height:" +canvas.height.toFloat())

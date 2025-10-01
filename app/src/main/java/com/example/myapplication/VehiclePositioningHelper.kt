@@ -21,7 +21,9 @@ class VehiclePositioningHelper {
 
     enum class Strategy {
         ADVANCED,
-        FRAME_FIT
+        FRAME_FIT,
+        HYBRID,
+        NONE
     }
     
     /**
@@ -39,7 +41,97 @@ class VehiclePositioningHelper {
         return when (strategy) {
             Strategy.ADVANCED -> analyzeAdvanced(vehicle, screenWidth, screenHeight, sourceImageWidth, sourceImageHeight)
             Strategy.FRAME_FIT -> analyzeFrameFit(vehicle, screenWidth, screenHeight, sourceImageWidth, sourceImageHeight)
+            Strategy.HYBRID -> analyzeHybrid(vehicle, screenWidth, screenHeight, sourceImageWidth, sourceImageHeight)
+            Strategy.NONE -> PositioningResult(
+                instruction = "",
+                isVehicleInFrame = true,
+                vehicleSize = maxOf(vehicle.w, vehicle.h),
+                isCentered = false
+            )
         }
+    }
+
+    /**
+     * Estrategia HYBRID:
+     * - Estado perfecto: Horizontalmente entre outer e inner (no completamente dentro del inner),
+     *   y verticalmente dentro del inner.
+     * - Si no, dar instrucciones simples (acércate/ aléjate/ mueve X/Y) para llegar a ese estado.
+     */
+    private fun analyzeHybrid(
+        vehicle: BoundingBox,
+        screenWidth: Int,
+        screenHeight: Int,
+        sourceImageWidth: Int,
+        sourceImageHeight: Int
+    ): PositioningResult {
+        val outer = getGuideFrameNormalized(screenWidth, screenHeight, sourceImageWidth, sourceImageHeight)
+
+        val innerPadding = 0.1f
+        val outerW = outer.right - outer.left
+        val outerH = outer.bottom - outer.top
+        val inner = RectF(
+            outer.left + outerW * innerPadding,
+            outer.top + outerH * innerPadding,
+            outer.right - outerW * innerPadding,
+            outer.bottom - outerH * innerPadding
+        )
+
+        val centerX = vehicle.cx
+        val centerY = vehicle.cy
+        val innerCenterX = (inner.left + inner.right) / 2f
+        val innerCenterY = (inner.top + inner.bottom) / 2f
+
+        // Condición de "estado perfecto" (híbrido)
+        val insideOuterHoriz = vehicle.x1 >= outer.left && vehicle.x2 <= outer.right
+        val insideInnerHoriz = vehicle.x1 >= inner.left && vehicle.x2 <= inner.right
+        val insideInnerVert = vehicle.y1 >= inner.top && vehicle.y2 <= inner.bottom
+        val horizontallyBetweenFrames = insideOuterHoriz && !insideInnerHoriz
+
+        if (horizontallyBetweenFrames && insideInnerVert) {
+            return PositioningResult(
+                instruction = "Posición correcta",
+                isVehicleInFrame = true,
+                vehicleSize = maxOf(vehicle.w, vehicle.h),
+                isCentered = true
+            )
+        }
+
+        val messages = mutableListOf<String>()
+
+        // Si sale del frame guía (outer) con 2 o más lados
+        var sidesOutside = 0
+        if (vehicle.x1 < outer.left) sidesOutside++
+        if (vehicle.x2 > outer.right) sidesOutside++
+        if (vehicle.y1 < outer.top) sidesOutside++
+        if (vehicle.y2 > outer.bottom) sidesOutside++
+        if (sidesOutside >= 2) {
+            messages.add("Aléjate")
+        }
+
+        // Vertical: objetivo es estar dentro del inner verticalmente
+        if (vehicle.y1 < inner.top) messages.add("Muévete más abajo")
+        if (vehicle.y2 > inner.bottom) messages.add("Muévete más arriba")
+
+        // Horizontal: objetivo es estar entre outer e inner
+        // Si está completamente dentro del inner horizontalmente, pedir acercar (para ensanchar)
+        if (insideInnerHoriz) messages.add("Acércate")
+
+        // Si está demasiado ancho (excede ambos lados del outer) pedir alejar
+        if (vehicle.x1 < outer.left && vehicle.x2 > outer.right) messages.add("Aléjate")
+
+        // Alineación horizontal simple hacia el centro del inner
+        val dx = centerX - innerCenterX
+        if (dx > CENTER_THRESHOLD) messages.add("Muévete a la izquierda")
+        if (dx < -CENTER_THRESHOLD) messages.add("Muévete a la derecha")
+
+        val instruction = if (messages.isEmpty()) "Posición correcta" else messages.distinct().joinToString(", ")
+        val correct = horizontallyBetweenFrames && insideInnerVert
+        return PositioningResult(
+            instruction = instruction,
+            isVehicleInFrame = correct,
+            vehicleSize = maxOf(vehicle.w, vehicle.h),
+            isCentered = correct
+        )
     }
 
     private fun analyzeAdvanced(vehicle: BoundingBox, screenWidth: Int, screenHeight: Int, sourceImageWidth: Int, sourceImageHeight: Int): PositioningResult {
