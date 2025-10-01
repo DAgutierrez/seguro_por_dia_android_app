@@ -198,18 +198,19 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
             Log.d(TAG, "bindCameraUseCases called - detector: ${detector != null}")
             
             // Don't use zoom manager's bindCameraUseCases, handle everything ourselves
-            val rotation = binding.viewFinder.display.rotation
+            val safeRotation = binding.viewFinder.display?.rotation
+                ?: windowManager.defaultDisplay.rotation
             val cameraSelector = zoomManager.getCurrentCameraSelector()
 
             val preview = androidx.camera.core.Preview.Builder()
                 .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
-                .setTargetRotation(rotation)
+                .setTargetRotation(safeRotation)
                 .build()
 
             val imageAnalyzer = ImageAnalysis.Builder()
                 .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_4_3)
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .setTargetRotation(binding.viewFinder.display.rotation)
+                .setTargetRotation(safeRotation)
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build()
 
