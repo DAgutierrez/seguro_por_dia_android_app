@@ -36,7 +36,7 @@ class InspectionActivity : AppCompatActivity() {
             previews[slot] = iv
 
             container.setOnClickListener {
-                val intent = Intent(this, CameraViewActivity::class.java)
+                val intent = Intent(this, LoadingActivity::class.java)
                 intent.putExtra("captureMode", true)
                 intent.putExtra("slot", slot)
                 startActivityForResult(intent, requestCodeBySlot.getValue(slot))
