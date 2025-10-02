@@ -18,8 +18,8 @@ android {
 
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "SUPABASE_URL", "\"https://vlbdporkjtogegumkgnk.supabase.co\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZsYmRwb3JranRvZ2VndW1rZ25rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ2ODA4MTQsImV4cCI6MjA2MDI1NjgxNH0.o8jYc7kysOq7qVV7W8wCHtIw_ioRnZMKCW2AJIWo9uo\"")
+        buildConfigField("String", "SUPABASE_URL", "\"https://irftadijrzslfwwelphb.supabase.co\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlyZnRhZGlqcnpzbGZ3d2VscGhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3NjY2NDAsImV4cCI6MjA3NDM0MjY0MH0.XkHXz9PnUrqtQ1dyqIGnsWTKGW2PCUXwUjN4fri6Jek\"")
     }
 
     buildTypes {

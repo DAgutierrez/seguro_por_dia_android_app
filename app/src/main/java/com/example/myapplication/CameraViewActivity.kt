@@ -128,10 +128,11 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                                     finish()
                                 }
                             } catch (t: Throwable) {
-                                Log.e(TAG, "Upload failed: ${t.message}")
+                                Log.e(TAG, "Upload failed: ${t.message}", t)
+                                Log.e(TAG, "Full error stack trace: ${t.stackTrace.joinToString("\n")}")
                                 runOnUiThread {
                                     captureButton.isEnabled = true
-                                    android.widget.Toast.makeText(this@CameraViewActivity, "Error subiendo foto", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(this@CameraViewActivity, "Error subiendo foto: ${t.message}", android.widget.Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
@@ -280,7 +281,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                                 sourceWidth = rotatedBitmap.width,
                                 sourceHeight = rotatedBitmap.height
                             )
-                            Log.d(TAG, "Overlay image dims set: ${rotatedBitmap.width}x${rotatedBitmap.height}")
+                           // Log.d(TAG, "Overlay image dims set: ${rotatedBitmap.width}x${rotatedBitmap.height}")
                         } catch (_: Throwable) {}
                     }
 
@@ -438,7 +439,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
     }
 
     override fun onDetectionCountChanged(count: Int) {
-        Log.d(TAG, "Detection count changed to: $count")
+        //Log.d(TAG, "Detection count changed to: $count")
     }
 
     private fun toggleFlash() {

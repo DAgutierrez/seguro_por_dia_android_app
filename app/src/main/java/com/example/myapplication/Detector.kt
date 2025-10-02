@@ -129,8 +129,8 @@ class Detector(
 
         var inferenceTime = SystemClock.uptimeMillis()
 
-        Log.d(TAG, " tensor width: $tensorWidth")
-        Log.d(TAG, " tensor height: $tensorHeight")
+       // Log.d(TAG, " tensor width: $tensorWidth")
+        //Log.d(TAG, " tensor height: $tensorHeight")
 
         // Usar letterbox strategy: escalar manteniendo aspect ratio y centrar
         val resizedBitmap = createLetterboxBitmap(frame, tensorWidth, tensorHeight)

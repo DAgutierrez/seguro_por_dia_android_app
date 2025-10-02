@@ -103,7 +103,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     override fun draw(canvas: Canvas) {
         super.draw(canvas)
 
-        Log.d(TAG, "rotationDegrees: $rotationDegrees")
+        //Log.d(TAG, "rotationDegrees: $rotationDegrees")
             
 
         // Compute frames (always calculate for logic), draw only if enabled
@@ -147,8 +147,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         // Update current instruction
         currentInstruction = if (positioningStrategy == VehiclePositioningHelper.Strategy.NONE) "" else bestPositioning?.instruction ?: ""
 
-        Log.d(TAG, "width:" + canvas.width.toFloat())
-        Log.d(TAG, "height:" +canvas.height.toFloat())
+        //Log.d(TAG, "width:" + canvas.width.toFloat())
+        //Log.d(TAG, "height:" +canvas.height.toFloat())
 
         // Draw vehicle bounding boxes using letterbox strategy
         results.forEach { vehicle ->

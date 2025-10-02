@@ -15,6 +15,13 @@ object SupabaseClientProvider {
         val fileName = (if (pathPrefix.isNotEmpty()) "$pathPrefix/" else "") + UUID.randomUUID().toString() + ".png"
         val url = BuildConfig.SUPABASE_URL.trimEnd('/') + "/storage/v1/object/$BUCKET/$fileName"
 
+        android.util.Log.d("SupabaseUpload", "Starting upload for file: $fileName")
+        android.util.Log.d("SupabaseUpload", "File size: ${byteArray.size} bytes")
+        android.util.Log.d("SupabaseUpload", "Upload URL: $url")
+        android.util.Log.d("SupabaseUpload", "Supabase URL: ${BuildConfig.SUPABASE_URL}")
+        android.util.Log.d("SupabaseUpload", "API Key (first 20 chars): ${BuildConfig.SUPABASE_ANON_KEY.take(20)}...")
+        android.util.Log.d("SupabaseUpload", "Bucket: $BUCKET")
+
         val body = RequestBody.create("image/png".toMediaType(), byteArray)
         val req = Request.Builder()
             .url(url)
@@ -25,14 +32,25 @@ object SupabaseClientProvider {
             .build()
 
         httpClient.newCall(req).execute().use { resp ->
+            android.util.Log.d("SupabaseUpload", "Response received: ${resp.code} ${resp.message}")
+            android.util.Log.d("SupabaseUpload", "Response headers: ${resp.headers}")
+            
             if (!resp.isSuccessful) {
                 val err = try { resp.body?.string() } catch (_: Throwable) { null }
-                throw IllegalStateException("Upload failed: ${resp.code} ${err ?: "(no body)"}")
+                val errorMessage = "Upload failed: ${resp.code} ${err ?: "(no body)"}"
+                android.util.Log.e("SupabaseUpload", "Error details: $errorMessage")
+                android.util.Log.e("SupabaseUpload", "Response headers: ${resp.headers}")
+                android.util.Log.e("SupabaseUpload", "Request URL: $url")
+                throw IllegalStateException(errorMessage)
             }
+            
+            android.util.Log.d("SupabaseUpload", "Upload successful!")
         }
 
         // Public URL format
-        return BuildConfig.SUPABASE_URL.trimEnd('/') + "/storage/v1/object/public/$BUCKET/$fileName"
+        val publicUrl = BuildConfig.SUPABASE_URL.trimEnd('/') + "/storage/v1/object/public/$BUCKET/$fileName"
+        android.util.Log.d("SupabaseUpload", "Public URL: $publicUrl")
+        return publicUrl
     }
 }
 
