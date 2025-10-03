@@ -13,12 +13,16 @@ class LoadingActivity : AppCompatActivity() {
 
         val captureMode = intent.getBooleanExtra("captureMode", false)
         val slot = intent.getStringExtra("slot")
+        val inspectionViewId = intent.getIntExtra("inspectionViewId", -1)
+        val inspectionViewDescription = intent.getStringExtra("inspectionViewDescription")
 
         // Delay to show loading screen
         Handler(Looper.getMainLooper()).postDelayed({
             val cameraIntent = Intent(this, CameraViewActivity::class.java)
             cameraIntent.putExtra("captureMode", captureMode)
             cameraIntent.putExtra("slot", slot)
+            cameraIntent.putExtra("inspectionViewId", inspectionViewId)
+            cameraIntent.putExtra("inspectionViewDescription", inspectionViewDescription)
             startActivityForResult(cameraIntent, 9999)
         }, 800) // shorter loading
     }

@@ -34,6 +34,8 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
     private var lastRotatedBitmap: android.graphics.Bitmap? = null
     private var captureMode: Boolean = false
     private var captureSlot: String? = null
+    private var inspectionViewId: Int = -1
+    private var inspectionViewDescription: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +43,8 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
         setContentView(binding.root)
         captureMode = intent.getBooleanExtra("captureMode", false)
         captureSlot = intent.getStringExtra("slot")
+        inspectionViewId = intent.getIntExtra("inspectionViewId", -1)
+        inspectionViewDescription = intent.getStringExtra("inspectionViewDescription")
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
@@ -117,22 +121,31 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                         val bytes = stream.toByteArray()
                         Executors.newSingleThreadExecutor().execute {
                             try {
-                                val url = SupabaseClientProvider.uploadPng(bytes, pathPrefix = captureSlot ?: "")
+                                val uploadedPublicUrl = SupabaseClientProvider.uploadPng(bytes, pathPrefix = captureSlot ?: "")
+                                val storagePath = SupabaseClientProvider.storagePathFromPublicUrl(uploadedPublicUrl)
+
+                                // Run prechecks before returning
+                                val ok = runPrechecks(storagePath)
                                 runOnUiThread {
-                                    val result = android.content.Intent().apply {
-                                        putExtra("uploadedUrl", url)
-                                        putExtra("slot", captureSlot)
+                                    if (ok) {
+                                        val result = android.content.Intent().apply {
+                                            putExtra("uploadedUrl", uploadedPublicUrl)
+                                            putExtra("slot", captureSlot)
+                                        }
+                                        setResult(android.app.Activity.RESULT_OK, result)
+                                        android.widget.Toast.makeText(this@CameraViewActivity, "Foto validada y subida", android.widget.Toast.LENGTH_SHORT).show()
+                                        finish()
+                                    } else {
+                                        // Delete and stay
+                                        SupabaseClientProvider.deleteImage(storagePath)
+                                        captureButton.isEnabled = true
                                     }
-                                    setResult(android.app.Activity.RESULT_OK, result)
-                                    android.widget.Toast.makeText(this@CameraViewActivity, "Foto subida", android.widget.Toast.LENGTH_SHORT).show()
-                                    finish()
                                 }
                             } catch (t: Throwable) {
-                                Log.e(TAG, "Upload failed: ${t.message}", t)
-                                Log.e(TAG, "Full error stack trace: ${t.stackTrace.joinToString("\n")}")
+                                Log.e(TAG, "Upload/precheck failed: ${t.message}", t)
                                 runOnUiThread {
                                     captureButton.isEnabled = true
-                                    android.widget.Toast.makeText(this@CameraViewActivity, "Error subiendo foto: ${t.message}", android.widget.Toast.LENGTH_LONG).show()
+                                    android.widget.Toast.makeText(this@CameraViewActivity, "Error: ${t.message}", android.widget.Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
@@ -143,6 +156,64 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                     }
                 }
             }
+        }
+    }
+
+    private fun runPrechecks(storagePath: String): Boolean {
+        return try {
+            if (inspectionViewId <= 0) { return true }
+            val prechecks = SupabaseClientProvider.getPrechecksForInspectionView(inspectionViewId)
+            android.util.Log.d("SupabasePrecheck", "precheck: $prechecks")
+            if (prechecks.isEmpty()) { return true }
+            for (p in prechecks) {
+                val body = "{" + "\"imageUrl\":\"" + storagePath + "\"}"
+                android.util.Log.d("SupabasePrecheck", "body: $body")
+                val responseText = SupabaseClientProvider.postJson(p.url, body)
+                val value = extractValueFromJson(responseText, p.responseAttribute)
+                val success = value == p.responseValue
+                runOnUiThread {
+                    showInfoDialog(if (success) p.successMessage else p.errorMessage)
+                }
+                if (!success) { return false }
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Precheck error: ${e.message}")
+            false
+        }
+    }
+
+    private fun extractValueFromJson(jsonText: String, attribute: String): String? {
+        return try {
+            val obj = org.json.JSONObject(jsonText)
+            // support nested attributes like a.b.c
+            val parts = attribute.split('.')
+            var current: Any = obj
+            for (part in parts) {
+                if (current is org.json.JSONObject) {
+                    current = if ((current as org.json.JSONObject).has(part)) (current as org.json.JSONObject).get(part) else return null
+                } else return null
+            }
+            when (current) {
+                is String -> current
+                is Number -> current.toString()
+                is Boolean -> current.toString()
+                else -> current.toString()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "JSON parse error: ${e.message}")
+            null
+        }
+    }
+
+    private fun showInfoDialog(message: String) {
+        try {
+            AlertDialog.Builder(this)
+                .setMessage(message)
+                .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+                .show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing dialog: ${e.message}")
         }
     }
 

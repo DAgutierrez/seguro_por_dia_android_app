@@ -91,6 +91,72 @@ object SupabaseClientProvider {
             }
         }
     }
+
+    fun getPrechecksForInspectionView(inspectionViewId: Int): List<InspectionViewPrecheck> {
+        val base = BuildConfig.SUPABASE_URL.trimEnd('/') + "/rest/v1/inspection-view-precheck"
+        val url = "$base?inspection-view-id=eq.$inspectionViewId"
+        android.util.Log.d("SupabasePrecheck", "Fetching prechecks from: $url")
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer ${BuildConfig.SUPABASE_ANON_KEY}")
+            .addHeader("apikey", BuildConfig.SUPABASE_ANON_KEY)
+            .addHeader("Accept", "application/json")
+            .get()
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errorBody = try { response.body?.string() } catch (_: Throwable) { null }
+                val errorMessage = "Precheck query failed: ${response.code} ${errorBody ?: "(no body)"}"
+                android.util.Log.e("SupabasePrecheck", errorMessage)
+                throw IllegalStateException(errorMessage)
+            }
+            val body = response.body?.string() ?: "[]"
+            return try {
+                val jsonElement = json.parseToJsonElement(body)
+                json.decodeFromJsonElement<List<InspectionViewPrecheck>>(jsonElement)
+            } catch (e: Exception) {
+                android.util.Log.e("SupabasePrecheck", "Parse error: ${e.message}")
+                emptyList()
+            }
+        }
+    }
+
+    fun deleteImage(publicPath: String) {
+        // publicPath example: diagonal_frontal_derecho/diagonal-frontal-derecho-1.jpeg
+        val url = BuildConfig.SUPABASE_URL.trimEnd('/') + "/storage/v1/object/$BUCKET/$publicPath"
+        val req = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer ${BuildConfig.SUPABASE_ANON_KEY}")
+            .addHeader("apikey", BuildConfig.SUPABASE_ANON_KEY)
+            .delete()
+            .build()
+        httpClient.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                android.util.Log.e("SupabaseDelete", "Failed to delete: ${resp.code} ${resp.message}")
+            } else {
+                android.util.Log.d("SupabaseDelete", "Deleted $publicPath")
+            }
+        }
+    }
+
+    fun storagePathFromPublicUrl(publicUrl: String): String {
+        val prefix = BuildConfig.SUPABASE_URL.trimEnd('/') + "/storage/v1/object/public/$BUCKET/"
+        return if (publicUrl.startsWith(prefix)) publicUrl.removePrefix(prefix) else publicUrl
+    }
+
+    fun postJson(url: String, jsonBody: String): String {
+        val media = "application/json; charset=utf-8".toMediaType()
+        val body = RequestBody.create(media, jsonBody)
+        val req = Request.Builder().url(url).post(body).build()
+        httpClient.newCall(req).execute().use { resp ->
+            val respBody = resp.body?.string() ?: ""
+            if (!resp.isSuccessful) {
+                android.util.Log.e("HttpPost", "POST $url failed: ${resp.code} $respBody")
+                throw IllegalStateException("POST failed: ${resp.code}")
+            }
+            return respBody
+        }
+    }
 }
 
 
