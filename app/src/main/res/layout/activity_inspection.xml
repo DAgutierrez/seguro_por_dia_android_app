@@ -5,17 +5,11 @@
     android:layout_height="match_parent">
 
     <LinearLayout
+        android:id="@+id/slots_container"
         android:orientation="vertical"
         android:padding="16dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
-
-        <include layout="@layout/item_inspection_slot" android:id="@+id/slot_lateral_izquierdo" />
-        <include layout="@layout/item_inspection_slot" android:id="@+id/slot_lateral_derecho" />
-        <include layout="@layout/item_inspection_slot" android:id="@+id/slot_diagonal_frontal_derecho" />
-        <include layout="@layout/item_inspection_slot" android:id="@+id/slot_diagonal_frontal_izquierdo" />
-        <include layout="@layout/item_inspection_slot" android:id="@+id/slot_diagonal_trasero_derecho" />
-        <include layout="@layout/item_inspection_slot" android:id="@+id/slot_diagonal_trasero_izquierdo" />
 
     </LinearLayout>
 </ScrollView>
