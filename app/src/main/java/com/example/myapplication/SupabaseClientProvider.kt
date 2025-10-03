@@ -147,7 +147,10 @@ object SupabaseClientProvider {
     fun postJson(url: String, jsonBody: String): String {
         val media = "application/json; charset=utf-8".toMediaType()
         val body = RequestBody.create(media, jsonBody)
-        val req = Request.Builder().url(url).post(body).build()
+        val req = Request.Builder().url(url)
+            .addHeader("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlyZnRhZGlqcnpzbGZ3d2VscGhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3NjY2NDAsImV4cCI6MjA3NDM0MjY0MH0.XkHXz9PnUrqtQ1dyqIGnsWTKGW2PCUXwUjN4fri6Jek")
+            .post(body)
+            .build()
         httpClient.newCall(req).execute().use { resp ->
             val respBody = resp.body?.string() ?: ""
             if (!resp.isSuccessful) {
