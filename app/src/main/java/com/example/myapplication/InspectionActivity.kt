@@ -26,12 +26,35 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     private val requestCodeBySlot = mutableMapOf<String, Int>()
     private val previews = hashMapOf<String, ImageView>()
     private val pendingPreviewLoads = mutableListOf<Pair<String, String>>() // slot to baseUrl
+    private val latestPreviewUrlBySlot = hashMapOf<String, String>() // persisted across rotation
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_inspection)
 
+        // Restore persisted preview URLs if any
+        savedInstanceState?.let { state ->
+            val keys = state.getStringArrayList("preview_keys")
+            val urls = state.getStringArrayList("preview_urls")
+            if (keys != null && urls != null && keys.size == urls.size) {
+                latestPreviewUrlBySlot.clear()
+                for (i in keys.indices) {
+                    latestPreviewUrlBySlot[keys[i]] = urls[i]
+                }
+                Log.d("InspectionActivity", "Restored ${latestPreviewUrlBySlot.size} preview URLs from state")
+            }
+        }
+
         loadInspectionViews()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (latestPreviewUrlBySlot.isNotEmpty()) {
+            outState.putStringArrayList("preview_keys", ArrayList(latestPreviewUrlBySlot.keys))
+            outState.putStringArrayList("preview_urls", ArrayList(latestPreviewUrlBySlot.values))
+            Log.d("InspectionActivity", "Saved ${latestPreviewUrlBySlot.size} preview URLs to state")
+        }
     }
 
     private fun loadInspectionViews() {
@@ -86,6 +109,16 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             container.addView(slotLayout)
         }
 
+        // Apply any persisted previews
+        if (latestPreviewUrlBySlot.isNotEmpty()) {
+            Log.d("InspectionActivity", "Re-applying ${latestPreviewUrlBySlot.size} persisted previews after dynamic slots created")
+            latestPreviewUrlBySlot.forEach { (slot, baseUrl) ->
+                previews[slot]?.let { iv ->
+                    loadImageWithRetry(iv, baseUrl)
+                }
+            }
+        }
+
         // Apply any pending preview loads now that previews map is ready
         if (pendingPreviewLoads.isNotEmpty()) {
             Log.d("InspectionActivity", "Applying ${pendingPreviewLoads.size} pending preview loads after dynamic slots created")
@@ -137,6 +170,16 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             container.addView(slotLayout)
         }
 
+        // Apply any persisted previews
+        if (latestPreviewUrlBySlot.isNotEmpty()) {
+            Log.d("InspectionActivity", "Re-applying ${latestPreviewUrlBySlot.size} persisted previews after fallback slots created")
+            latestPreviewUrlBySlot.forEach { (slot, baseUrl) ->
+                previews[slot]?.let { iv ->
+                    loadImageWithRetry(iv, baseUrl)
+                }
+            }
+        }
+
         // Apply any pending preview loads now that previews map is ready
         if (pendingPreviewLoads.isNotEmpty()) {
             Log.d("InspectionActivity", "Applying ${pendingPreviewLoads.size} pending preview loads after fallback slots created")
@@ -163,6 +206,9 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 Log.w("InspectionActivity", "Missing slot in result")
                 return
             }
+            // persist latest preview URL for this slot
+            latestPreviewUrlBySlot[slot] = baseUrl
+
             val target = previews[slot]
             if (target == null) {
                 Log.w("InspectionActivity", "Preview not ready yet for slot='$slot'. Queueing pending load. Currently available keys=${previews.keys}")
