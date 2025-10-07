@@ -5,7 +5,9 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Log
+import android.view.LayoutInflater
 import android.view.MotionEvent
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -55,7 +57,11 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
             if (allPermissionsGranted()) {
                 startCamera()
             } else {
-                ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+                ActivityCompat.requestPermissions(
+                    this,
+                    REQUIRED_PERMISSIONS,
+                    REQUEST_CODE_PERMISSIONS
+                )
             }
 
         } catch (e: Exception) {
@@ -99,7 +105,8 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
 
             // Camera List Button
             cameraListButton.setOnClickListener {
-                val intent = android.content.Intent(this@CameraViewActivity, CameraListActivity::class.java)
+                val intent =
+                    android.content.Intent(this@CameraViewActivity, CameraListActivity::class.java)
                 startActivity(intent)
             }
 
@@ -111,76 +118,160 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                     try {
                         val bmp = lastRotatedBitmap
                         if (bmp == null) {
-                            android.widget.Toast.makeText(this@CameraViewActivity, "Preparando cámara... intenta de nuevo", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(
+                                this@CameraViewActivity,
+                                "Preparando cámara... intenta de nuevo",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
                             return@setOnClickListener
                         }
-                        captureButton.isEnabled = false
-                        android.widget.Toast.makeText(this@CameraViewActivity, "Capturando...", android.widget.Toast.LENGTH_SHORT).show()
+                        binding.captureButton.isEnabled = false
+                        android.widget.Toast.makeText(
+                            this@CameraViewActivity,
+                            "Capturando...",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
                         val stream = java.io.ByteArrayOutputStream()
                         bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
                         val bytes = stream.toByteArray()
                         Executors.newSingleThreadExecutor().execute {
                             try {
-                                val uploadedPublicUrl = SupabaseClientProvider.uploadPng(bytes, pathPrefix = captureSlot ?: "")
-                                val storagePath = SupabaseClientProvider.storagePathFromPublicUrl(uploadedPublicUrl)
+                                val uploadedPublicUrl = SupabaseClientProvider.uploadPng(
+                                    bytes,
+                                    pathPrefix = captureSlot ?: ""
+                                )
+                                val storagePath = SupabaseClientProvider.storagePathFromPublicUrl(
+                                    uploadedPublicUrl
+                                )
 
-                                // Run prechecks before returning
-                                val ok = runPrechecks(storagePath)
+                                // Run prechecks before returning - execute async on UI
+                                Log.d(TAG, "About to run prechecks with storagePath: $storagePath")
                                 runOnUiThread {
-                                    if (ok) {
-                                        val result = android.content.Intent().apply {
-                                            putExtra("uploadedUrl", uploadedPublicUrl)
-                                            putExtra("slot", captureSlot)
-                                        }
-                                        setResult(android.app.Activity.RESULT_OK, result)
-                                        android.widget.Toast.makeText(this@CameraViewActivity, "Foto validada y subida", android.widget.Toast.LENGTH_SHORT).show()
-                                        finish()
-                                    } else {
-                                        // Delete and stay
-                                        SupabaseClientProvider.deleteImage(storagePath)
-                                        captureButton.isEnabled = true
-                                    }
+                                    runPrechecksAsync(storagePath, uploadedPublicUrl)
                                 }
                             } catch (t: Throwable) {
                                 Log.e(TAG, "Upload/precheck failed: ${t.message}", t)
                                 runOnUiThread {
-                                    captureButton.isEnabled = true
-                                    android.widget.Toast.makeText(this@CameraViewActivity, "Error: ${t.message}", android.widget.Toast.LENGTH_LONG).show()
+                                    binding.captureButton.isEnabled = true
+                                    android.widget.Toast.makeText(
+                                        this@CameraViewActivity,
+                                        "Error: ${t.message}",
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
                                 }
                             }
                         }
                     } catch (t: Throwable) {
                         Log.e(TAG, "Capture failed: ${t.message}")
-                        captureButton.isEnabled = true
-                        android.widget.Toast.makeText(this@CameraViewActivity, "Error al capturar", android.widget.Toast.LENGTH_SHORT).show()
+                        binding.captureButton.isEnabled = true
+                        android.widget.Toast.makeText(
+                            this@CameraViewActivity,
+                            "Error al capturar",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
             }
         }
     }
 
-    private fun runPrechecks(storagePath: String): Boolean {
-        return try {
-            if (inspectionViewId <= 0) { return true }
-            val prechecks = SupabaseClientProvider.getPrechecksForInspectionView(inspectionViewId)
-            android.util.Log.d("SupabasePrecheck", "precheck: $prechecks")
-            if (prechecks.isEmpty()) { return true }
-            for (p in prechecks) {
-                val body = "{" + "\"imageUrl\":\"" + storagePath + "\"}"
-                android.util.Log.d("SupabasePrecheck", "body: $body")
-                val responseText = SupabaseClientProvider.postJson(p.url, body)
-                val value = extractValueFromJson(responseText, p.responseAttribute)
-                val success = value == p.responseValue
-                runOnUiThread {
-                    showInfoDialog(if (success) p.successMessage else p.errorMessage)
-                }
-                if (!success) { return false }
-            }
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Precheck error: ${e.message}")
-            false
+    private fun runPrechecksAsync(storagePath: String, uploadedPublicUrl: String) {
+        Log.d(TAG, "runPrechecksAsync called - inspectionViewId: $inspectionViewId")
+        if (inspectionViewId <= 0) {
+            Log.d(TAG, "No inspectionViewId, finishing with success")
+            finishWithSuccess(uploadedPublicUrl)
+            return
         }
+        
+        // Show overlay immediately
+        Log.d(TAG, "Showing precheck progress overlay")
+        val overlayRef = showPrecheckProgress()
+        Log.d(TAG, "Overlay created: $overlayRef")
+        
+        // Run prechecks in background
+        Executors.newSingleThreadExecutor().execute {
+            try {
+                val prechecks = SupabaseClientProvider.getPrechecksForInspectionView(inspectionViewId)
+                android.util.Log.d("SupabasePrecheck", "precheck: $prechecks")
+                
+                if (prechecks.isEmpty()) {
+                    runOnUiThread {
+                        dismissPrecheckProgress(overlayRef)
+                        finishWithSuccess(uploadedPublicUrl)
+                    }
+                    return@execute
+                }
+
+                for (i in prechecks.indices) {
+                    val p = prechecks[i]
+                    
+                    runOnUiThread {
+                        updatePrecheckProgress(
+                            overlayRef,
+                            statusText = "Validando",
+                            detailText = "Paso ${i + 1} de ${prechecks.size}"
+                        )
+                    }
+                    
+                    val body = "{" + "\"imageUrl\":\"" + storagePath + "\"}"
+                    android.util.Log.d("SupabasePrecheck", "body: $body")
+                    val responseText = SupabaseClientProvider.postJson(p.url, body)
+                    android.util.Log.d("SupabasePrecheck", "response: $responseText")
+                    val value = extractValueFromJson(responseText, p.responseAttribute)
+                    android.util.Log.d("SupabasePrecheck", "value: $value")
+                    android.util.Log.d("SupabasePrecheck", "p: $p")
+                    val success = value == p.responseValue
+                    
+                    runOnUiThread {
+                        updatePrecheckProgress(
+                            overlayRef,
+                            statusText = if (success) "Validado" else "Error",
+                            detailText = if (success) p.successMessage else p.errorMessage
+                        )
+                    }
+                    
+                    if (!success) {
+                        runOnUiThread {
+                            dismissPrecheckProgress(overlayRef)
+                            //showInfoDialog(p.errorMessage)
+                           // SupabaseClientProvider.deleteImage(storagePath)
+                           binding.captureButton.isEnabled = true
+                            android.widget.Toast.makeText(
+                                this@CameraViewActivity,
+                                "Foto rechazada: ${p.errorMessage}",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        return@execute
+                    }
+                }
+                
+                runOnUiThread {
+                    dismissPrecheckProgress(overlayRef)
+                    finishWithSuccess(uploadedPublicUrl)
+                }
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Precheck error: ${e.message}")
+                runOnUiThread {
+                    dismissPrecheckProgress(overlayRef)
+                    SupabaseClientProvider.deleteImage(storagePath)
+                    binding.captureButton.isEnabled = true
+                    showInfoDialog("Error en validación: ${e.message}")
+                    android.widget.Toast.makeText(this@CameraViewActivity, "Error en validación, foto eliminada", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    
+    private fun finishWithSuccess(uploadedPublicUrl: String) {
+        val result = android.content.Intent().apply {
+            putExtra("uploadedUrl", uploadedPublicUrl)
+            putExtra("slot", captureSlot)
+        }
+        setResult(android.app.Activity.RESULT_OK, result)
+        android.widget.Toast.makeText(this, "Foto validada y subida", android.widget.Toast.LENGTH_SHORT).show()
+        finish()
     }
 
     private fun extractValueFromJson(jsonText: String, attribute: String): String? {
@@ -191,7 +282,10 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
             var current: Any = obj
             for (part in parts) {
                 if (current is org.json.JSONObject) {
-                    current = if ((current as org.json.JSONObject).has(part)) (current as org.json.JSONObject).get(part) else return null
+                    current =
+                        if ((current as org.json.JSONObject).has(part)) (current as org.json.JSONObject).get(
+                            part
+                        ) else return null
                 } else return null
             }
             when (current) {
@@ -206,11 +300,75 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
         }
     }
 
+    @android.annotation.SuppressLint("InflateParams")
+    private fun showPrecheckProgress(): android.widget.FrameLayout {
+        Log.d(TAG, "showPrecheckProgress starting")
+        val rootView = findViewById<android.view.ViewGroup>(android.R.id.content)
+        Log.d(TAG, "Root view found: $rootView")
+        
+        // Remove any existing overlay first
+        val existingOverlay = findViewById<android.widget.FrameLayout>(R.id.precheck_overlay_root)
+        if (existingOverlay != null) {
+            Log.d(TAG, "Removing existing overlay")
+            rootView.removeView(existingOverlay)
+        }
+        
+        val overlay = LayoutInflater.from(this).inflate(
+            R.layout.precheck_progress_overlay,
+            rootView,
+            false
+        ) as android.widget.FrameLayout
+        overlay.id = R.id.precheck_overlay_root
+        rootView.addView(overlay)
+        
+        // Ensure visibility
+        overlay.visibility = android.view.View.VISIBLE
+        overlay.bringToFront()
+        
+        Log.d(TAG, "Overlay created and added, visible: ${overlay.visibility}, parent: ${overlay.parent}")
+        return overlay
+    }
+
+    private fun updatePrecheckProgress(
+        overlayRef: android.widget.FrameLayout?,
+        statusText: String? = null,
+        detailText: String? = null
+    ) {
+        runOnUiThread {
+            Log.d(TAG, "updatePrecheckProgress: overlay=$overlayRef, status='$statusText', detail='$detailText'")
+            val statusView = overlayRef?.findViewById<TextView>(R.id.precheck_status)
+            val detailView = overlayRef?.findViewById<TextView>(R.id.precheck_detail)
+            Log.d(TAG, "Views found: status=$statusView, detail=$detailView")
+            
+            statusView?.text = statusText ?: ""
+            detailView?.text = detailText ?: ""
+            
+            // Force redraw
+            overlayRef?.invalidate()
+        }
+    }
+
+    private fun dismissPrecheckProgress(overlayRef: android.widget.FrameLayout?) {
+        runOnUiThread {
+            Log.d(TAG, "dismissPrecheckProgress: removing overlay=$overlayRef")
+            val rootView = findViewById<android.view.ViewGroup>(android.R.id.content)
+            overlayRef?.let { 
+                rootView.removeView(it)
+                Log.d(TAG, "Overlay removed successfully")
+            }
+        }
+    }
+
     private fun showInfoDialog(message: String) {
         try {
             AlertDialog.Builder(this)
+                .setTitle("Validación de Foto")
                 .setMessage(message)
-                .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+                .setPositiveButton("Entendido") { dialog, _ -> 
+                    dialog.dismiss()
+                    // Usuario permanece en la cámara, no se hace nada adicional
+                }
+                .setCancelable(false)
                 .show()
         } catch (e: Exception) {
             Log.e(TAG, "Error showing dialog: ${e.message}")
@@ -240,7 +398,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                 }
 
                 Log.d(TAG, "Setting up zoom manager with detector: ${detector != null}")
-                
+
                 zoomManager = CameraZoomManager(
                     context = this,
                     cameraProvider = provider,
@@ -266,10 +424,10 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
 
                 // Setup other listeners
                 setupListeners()
-                
+
                 // Now bind camera use cases after everything is ready
                 bindCameraUseCases()
-                
+
                 Log.d(TAG, "Zoom manager setup completed with detector")
             }
         } catch (e: Exception) {
@@ -281,7 +439,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
     private fun bindCameraUseCases() {
         try {
             Log.d(TAG, "bindCameraUseCases called - detector: ${detector != null}")
-            
+
             // Don't use zoom manager's bindCameraUseCases, handle everything ourselves
             val safeRotation = binding.viewFinder.display?.rotation
                 ?: windowManager.defaultDisplay.rotation
@@ -352,15 +510,19 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                                 sourceWidth = rotatedBitmap.width,
                                 sourceHeight = rotatedBitmap.height
                             )
-                           // Log.d(TAG, "Overlay image dims set: ${rotatedBitmap.width}x${rotatedBitmap.height}")
-                        } catch (_: Throwable) {}
+                            // Log.d(TAG, "Overlay image dims set: ${rotatedBitmap.width}x${rotatedBitmap.height}")
+                        } catch (_: Throwable) {
+                        }
                     }
 
                     localDetector.detect(rotatedBitmap)
                 } catch (t: Throwable) {
                     Log.e(TAG, "Analyzer error: ${t.message}", t)
                 } finally {
-                    try { imageProxy.close() } catch (_: Throwable) {}
+                    try {
+                        imageProxy.close()
+                    } catch (_: Throwable) {
+                    }
                 }
             }
 
@@ -393,9 +555,9 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
             }
 
             preview.setSurfaceProvider(binding.viewFinder.surfaceProvider)
-            
+
             Log.d(TAG, "Camera bound with custom image analyzer")
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Error binding camera use cases: ${e.message}")
             showErrorDialog("Error configurando la cámara", e.message ?: "Error desconocido")
@@ -407,13 +569,19 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()) {
-        if (it[Manifest.permission.CAMERA] == true) { startCamera() }
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        if (it[Manifest.permission.CAMERA] == true) {
+            startCamera()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        try { imageAnalyzerRef?.clearAnalyzer() } catch (_: Throwable) {}
+        try {
+            imageAnalyzerRef?.clearAnalyzer()
+        } catch (_: Throwable) {
+        }
         detector?.close()
         cameraExecutor.shutdown()
     }
@@ -435,7 +603,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
             if (detector == null) {
                 initializeDetector()
             }
-            
+
             // Solo reiniciar cámara si no hay cámara activa
             if (camera == null && allPermissionsGranted()) {
                 startCamera()
@@ -452,13 +620,13 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
         super.onConfigurationChanged(newConfig)
         try {
             Log.d(TAG, "Configuration changed, orientation: ${newConfig.orientation}")
-            
+
             // Reiniciar la cámara para adaptarse al nuevo layout
             if (allPermissionsGranted()) {
                 // Desvincular la cámara actual
                 cameraProvider?.unbindAll()
                 camera = null
-                
+
                 // Reiniciar la cámara con la nueva configuración
                 startCamera()
             }
@@ -471,7 +639,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
     companion object {
         private const val TAG = "Camera"
         private const val REQUEST_CODE_PERMISSIONS = 10
-        private val REQUIRED_PERMISSIONS = mutableListOf (
+        private val REQUIRED_PERMISSIONS = mutableListOf(
             Manifest.permission.CAMERA
         ).toTypedArray()
     }
