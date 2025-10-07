@@ -9,15 +9,23 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.bumptech.glide.load.engine.GlideException
+import com.bumptech.glide.load.DataSource
+import android.graphics.drawable.Drawable
 
 class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope(Dispatchers.Main) {
     private var inspectionViews = listOf<InspectionView>()
     private val requestCodeBySlot = mutableMapOf<String, Int>()
     private val previews = hashMapOf<String, ImageView>()
+    private val pendingPreviewLoads = mutableListOf<Pair<String, String>>() // slot to baseUrl
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,6 +57,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     private fun createDynamicSlots() {
         val container = findViewById<LinearLayout>(R.id.slots_container)
         container.removeAllViews()
+        previews.clear()
         
         inspectionViews.forEachIndexed { index, inspectionView ->
             val slotId = "inspection_view_${inspectionView.id}"
@@ -70,10 +79,24 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 intent.putExtra("slot", slotId)
                 intent.putExtra("inspectionViewId", inspectionView.id)
                 intent.putExtra("inspectionViewDescription", inspectionView.description)
+                Log.d("InspectionActivity", "Launching capture for slot=$slotId (id=${inspectionView.id})")
                 startActivityForResult(intent, requestCodeBySlot.getValue(slotId))
             }
             
             container.addView(slotLayout)
+        }
+
+        // Apply any pending preview loads now that previews map is ready
+        if (pendingPreviewLoads.isNotEmpty()) {
+            Log.d("InspectionActivity", "Applying ${pendingPreviewLoads.size} pending preview loads after dynamic slots created")
+            val iterator = pendingPreviewLoads.iterator()
+            while (iterator.hasNext()) {
+                val (slot, baseUrl) = iterator.next()
+                previews[slot]?.let { iv ->
+                    loadImageWithRetry(iv, baseUrl)
+                    iterator.remove()
+                }
+            }
         }
     }
 
@@ -89,6 +112,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
         
         val container = findViewById<LinearLayout>(R.id.slots_container)
         container.removeAllViews()
+        previews.clear()
         
         fallbackSlots.forEachIndexed { index, slot ->
             requestCodeBySlot[slot] = 1000 + index
@@ -106,22 +130,92 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 val intent = Intent(this, LoadingActivity::class.java)
                 intent.putExtra("captureMode", true)
                 intent.putExtra("slot", slot)
+                Log.d("InspectionActivity", "Launching capture (fallback) for slot=$slot")
                 startActivityForResult(intent, requestCodeBySlot.getValue(slot))
             }
             
             container.addView(slotLayout)
         }
+
+        // Apply any pending preview loads now that previews map is ready
+        if (pendingPreviewLoads.isNotEmpty()) {
+            Log.d("InspectionActivity", "Applying ${pendingPreviewLoads.size} pending preview loads after fallback slots created")
+            val iterator = pendingPreviewLoads.iterator()
+            while (iterator.hasNext()) {
+                val (slot, baseUrl) = iterator.next()
+                previews[slot]?.let { iv ->
+                    loadImageWithRetry(iv, baseUrl)
+                    iterator.remove()
+                }
+            }
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        Log.d("InspectionActivity", "onActivityResult: requestCode=$requestCode resultCode=$resultCode dataExtras=${data?.extras}")
         if (resultCode == Activity.RESULT_OK && data != null) {
-            val url = data.getStringExtra("uploadedUrl") ?: return
-            val slot = data.getStringExtra("slot") ?: return
-            previews[slot]?.let { iv ->
-                Glide.with(this).load(url).into(iv)
+            val baseUrl = data.getStringExtra("uploadedUrl") ?: run {
+                Log.w("InspectionActivity", "Missing uploadedUrl in result")
+                return
             }
+            val slot = data.getStringExtra("slot") ?: run {
+                Log.w("InspectionActivity", "Missing slot in result")
+                return
+            }
+            val target = previews[slot]
+            if (target == null) {
+                Log.w("InspectionActivity", "Preview not ready yet for slot='$slot'. Queueing pending load. Currently available keys=${previews.keys}")
+                pendingPreviewLoads.add(slot to baseUrl)
+                return
+            }
+            Log.d("InspectionActivity", "Preparing to load preview for slot='$slot' url='$baseUrl'")
+            loadImageWithRetry(target, baseUrl)
         }
+    }
+
+    private fun buildCacheBustedUrl(baseUrl: String): String {
+        val ts = System.currentTimeMillis()
+        return if ('?' in baseUrl) "$baseUrl&_ts=$ts" else "$baseUrl?_ts=$ts"
+    }
+
+    private fun loadImageWithRetry(targetView: ImageView, baseUrl: String, attempt: Int = 1, maxAttempts: Int = 4) {
+        val url = buildCacheBustedUrl(baseUrl)
+        Log.d("InspectionActivity", "Loading image (attempt $attempt/$maxAttempts): $url into=$targetView")
+        Glide.with(this)
+            .load(url)
+            .diskCacheStrategy(DiskCacheStrategy.NONE)
+            .skipMemoryCache(true)
+            .dontAnimate()
+            .listener(object : RequestListener<Drawable> {
+                override fun onLoadFailed(
+                    e: GlideException?,
+                    model: Any?,
+                    target: Target<Drawable>,
+                    isFirstResource: Boolean
+                ): Boolean {
+                    Log.w("InspectionActivity", "Glide onLoadFailed attempt=$attempt err=${e?.localizedMessage} model=$model target=$target first=$isFirstResource")
+                    if (attempt < maxAttempts) {
+                        launch {
+                            delay(350L * attempt)
+                            loadImageWithRetry(targetView, baseUrl, attempt + 1, maxAttempts)
+                        }
+                    }
+                    return false
+                }
+
+                override fun onResourceReady(
+                    resource: Drawable,
+                    model: Any,
+                    target: Target<Drawable>,
+                    dataSource: DataSource,
+                    isFirstResource: Boolean
+                ): Boolean {
+                    Log.d("InspectionActivity", "Glide onResourceReady attempt=$attempt source=$dataSource first=$isFirstResource target=$target")
+                    return false
+                }
+            })
+            .into(targetView)
     }
 }
 
