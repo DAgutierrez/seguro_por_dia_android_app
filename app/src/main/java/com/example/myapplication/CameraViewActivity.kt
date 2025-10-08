@@ -57,11 +57,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
             if (allPermissionsGranted()) {
                 startCamera()
             } else {
-                ActivityCompat.requestPermissions(
-                    this,
-                    REQUIRED_PERMISSIONS,
-                    REQUEST_CODE_PERMISSIONS
-                )
+                ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
             }
 
         } catch (e: Exception) {
@@ -105,8 +101,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
 
             // Camera List Button
             cameraListButton.setOnClickListener {
-                val intent =
-                    android.content.Intent(this@CameraViewActivity, CameraListActivity::class.java)
+                val intent = android.content.Intent(this@CameraViewActivity, CameraListActivity::class.java)
                 startActivity(intent)
             }
 
@@ -118,31 +113,18 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                     try {
                         val bmp = lastRotatedBitmap
                         if (bmp == null) {
-                            android.widget.Toast.makeText(
-                                this@CameraViewActivity,
-                                "Preparando cámara... intenta de nuevo",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
+                            android.widget.Toast.makeText(this@CameraViewActivity, "Preparando cámara... intenta de nuevo", android.widget.Toast.LENGTH_SHORT).show()
                             return@setOnClickListener
                         }
                         binding.captureButton.isEnabled = false
-                        android.widget.Toast.makeText(
-                            this@CameraViewActivity,
-                            "Capturando...",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
+                        android.widget.Toast.makeText(this@CameraViewActivity, "Capturando...", android.widget.Toast.LENGTH_SHORT).show()
                         val stream = java.io.ByteArrayOutputStream()
                         bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)
                         val bytes = stream.toByteArray()
                         Executors.newSingleThreadExecutor().execute {
                             try {
-                                val uploadedPublicUrl = SupabaseClientProvider.uploadPng(
-                                    bytes,
-                                    pathPrefix = captureSlot ?: ""
-                                )
-                                val storagePath = SupabaseClientProvider.storagePathFromPublicUrl(
-                                    uploadedPublicUrl
-                                )
+                                val uploadedPublicUrl = SupabaseClientProvider.uploadPng(bytes, pathPrefix = captureSlot ?: "")
+                                val storagePath = SupabaseClientProvider.storagePathFromPublicUrl(uploadedPublicUrl)
 
                                 // Run prechecks before returning - execute async on UI
                                 Log.d(TAG, "About to run prechecks with storagePath: $storagePath")
@@ -153,22 +135,14 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                                 Log.e(TAG, "Upload/precheck failed: ${t.message}", t)
                                 runOnUiThread {
                                     binding.captureButton.isEnabled = true
-                                    android.widget.Toast.makeText(
-                                        this@CameraViewActivity,
-                                        "Error: ${t.message}",
-                                        android.widget.Toast.LENGTH_LONG
-                                    ).show()
+                                    android.widget.Toast.makeText(this@CameraViewActivity, "Error: ${t.message}", android.widget.Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
                     } catch (t: Throwable) {
                         Log.e(TAG, "Capture failed: ${t.message}")
                         binding.captureButton.isEnabled = true
-                        android.widget.Toast.makeText(
-                            this@CameraViewActivity,
-                            "Error al capturar",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
+                        android.widget.Toast.makeText(this@CameraViewActivity, "Error al capturar", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -213,15 +187,22 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                         )
                     }
                     
-                    val body = "{" + "\"imageUrl\":\"" + storagePath + "\"}"
-                    android.util.Log.d("SupabasePrecheck", "body: $body")
-                    val responseText = SupabaseClientProvider.postJson(p.url, body)
+                    val bodyJson = org.json.JSONObject().apply {
+                        put("imageUrl", storagePath)
+                        put("responseValue", p.responseValue)
+                    }.toString()
+                    android.util.Log.d("SupabasePrecheck", "body: $bodyJson")
+                    val responseText = SupabaseClientProvider.postJson(p.url, bodyJson)
                     android.util.Log.d("SupabasePrecheck", "response: $responseText")
                     val value = extractValueFromJson(responseText, p.responseAttribute)
-                    android.util.Log.d("SupabasePrecheck", "value: $value")
-                    android.util.Log.d("SupabasePrecheck", "p: $p")
-                    val success = value == p.responseValue
-                    
+                    val responseJson = org.json.JSONObject(responseText)
+                    val success = responseJson.getBoolean("success")
+                    android.util.Log.d("SupabasePrecheck", "succesRes: $success")
+
+                    //android.util.Log.d("SupabasePrecheck", "value: $value")
+                    //android.util.Log.d("SupabasePrecheck", "p: $p")
+                    //val success = value == p.responseValue
+                    //android.util.Log.d("SupabasePrecheck", "success: $success")
                     runOnUiThread {
                         updatePrecheckProgress(
                             overlayRef,
@@ -234,13 +215,9 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                         runOnUiThread {
                             dismissPrecheckProgress(overlayRef)
                             //showInfoDialog(p.errorMessage)
-                           // SupabaseClientProvider.deleteImage(storagePath)
-                           binding.captureButton.isEnabled = true
-                            android.widget.Toast.makeText(
-                                this@CameraViewActivity,
-                                "Foto rechazada: ${p.errorMessage}",
-                                android.widget.Toast.LENGTH_LONG
-                            ).show()
+                            // SupabaseClientProvider.deleteImage(storagePath)
+                            binding.captureButton.isEnabled = true
+                            android.widget.Toast.makeText(this@CameraViewActivity, "Foto rechazada: ${p.errorMessage}", android.widget.Toast.LENGTH_LONG).show()
                         }
                         return@execute
                     }
@@ -263,7 +240,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
             }
         }
     }
-    
+
     private fun finishWithSuccess(uploadedPublicUrl: String) {
         val result = android.content.Intent().apply {
             putExtra("uploadedUrl", uploadedPublicUrl)
