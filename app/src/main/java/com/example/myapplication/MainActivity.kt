@@ -2,8 +2,8 @@ package com.example.myapplication
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.card.MaterialCardView
 
 class MainActivity : AppCompatActivity() {
     
@@ -15,8 +15,8 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun setupNavigation() {
-        // Inspection Button
-        findViewById<Button?>(R.id.btn_inspection)?.setOnClickListener {
+        // Inspection Button (now a MaterialCardView)
+        findViewById<MaterialCardView?>(R.id.btn_inspection)?.setOnClickListener {
             val intent = Intent(this@MainActivity, InspectionActivity::class.java)
             startActivity(intent)
         }

@@ -32,6 +32,14 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_inspection)
 
+        // Setup toolbar
+        val toolbar = findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        toolbar.setNavigationOnClickListener {
+            finish()
+        }
+
         // Restore persisted preview URLs if any
         savedInstanceState?.let { state ->
             val keys = state.getStringArrayList("preview_keys")

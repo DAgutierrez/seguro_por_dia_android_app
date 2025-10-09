@@ -51,6 +51,8 @@ dependencies {
     implementation("com.google.android.material:material:1.13.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
+    implementation("androidx.coordinatorlayout:coordinatorlayout:1.2.0")
+    implementation("androidx.cardview:cardview:1.0.0")
 
     // CameraX
     implementation("androidx.camera:camera-core:1.4.2")

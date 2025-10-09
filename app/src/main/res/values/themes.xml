@@ -1,8 +1,28 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Base.Theme.YOLOv8TfLite" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <!-- Primary colors -->
+        <item name="colorPrimary">#1A237E</item>
+        <item name="colorPrimaryVariant">#000051</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        
+        <!-- Secondary colors -->
+        <item name="colorSecondary">#303F9F</item>
+        <item name="colorSecondaryVariant">#001970</item>
+        <item name="colorOnSecondary">#FFFFFF</item>
+        
+        <!-- Background colors -->
+        <item name="android:colorBackground">#F5F7FA</item>
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnBackground">#1A237E</item>
+        <item name="colorOnSurface">#1A237E</item>
+        
+        <!-- Status bar -->
+        <item name="android:statusBarColor">#1A237E</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+        
+        <!-- Navigation bar -->
+        <item name="android:navigationBarColor">#1A237E</item>
     </style>
 
     <style name="Theme.YOLOv8TfLite" parent="Base.Theme.YOLOv8TfLite" />
