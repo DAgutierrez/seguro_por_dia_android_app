@@ -15,20 +15,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun setupNavigation() {
-        // Camera View Button
-        findViewById<Button>(R.id.btn_camera_view).setOnClickListener {
-            val intent = Intent(this@MainActivity, CameraViewActivity::class.java)
-            startActivity(intent)
-        }
-
-        
-        // Camera List Button
-        findViewById<Button>(R.id.btn_camera_list).setOnClickListener {
-            val intent = Intent(this@MainActivity, CameraListActivity::class.java)
-            startActivity(intent)
-        }
-
-        // Inspection Button (reusing camera list button if not present in layout)
+        // Inspection Button
         findViewById<Button?>(R.id.btn_inspection)?.setOnClickListener {
             val intent = Intent(this@MainActivity, InspectionActivity::class.java)
             startActivity(intent)

@@ -99,12 +99,6 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                 toggleFlash()
             }
 
-            // Camera List Button
-            cameraListButton.setOnClickListener {
-                val intent = android.content.Intent(this@CameraViewActivity, CameraListActivity::class.java)
-                startActivity(intent)
-            }
-
             // GPU is enabled by default
             Log.d(TAG, "GPU acceleration enabled by default")
 
