@@ -8,9 +8,17 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 object SupabaseClientProvider {
     private val httpClient = OkHttpClient()
+    
+    // Cliente con timeout extendido para prechecks (30 segundos)
+    private val precheckHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
     private const val BUCKET = "inspection-images"
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -149,13 +157,22 @@ object SupabaseClientProvider {
         val body = RequestBody.create(media, jsonBody)
         val req = Request.Builder().url(url)
             .addHeader("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlyZnRhZGlqcnpzbGZ3d2VscGhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg3NjY2NDAsImV4cCI6MjA3NDM0MjY0MH0.XkHXz9PnUrqtQ1dyqIGnsWTKGW2PCUXwUjN4fri6Jek")
+            .addHeader("Accept", "application/json")
+            .addHeader("Prefer", "return=minimal")
             .post(body)
             .build()
-        httpClient.newCall(req).execute().use { resp ->
+        
+        android.util.Log.d("HttpPost", "Making POST request to: $url with timeout: 30s")
+        android.util.Log.d("HttpPost", "Request body: $jsonBody")
+        
+        precheckHttpClient.newCall(req).execute().use { resp ->
             val respBody = resp.body?.string() ?: ""
+            android.util.Log.d("HttpPost", "Response received: ${resp.code} ${resp.message}")
+            android.util.Log.d("HttpPost", "Response body: $respBody")
+            
             if (!resp.isSuccessful) {
                 android.util.Log.e("HttpPost", "POST $url failed: ${resp.code} $respBody")
-                throw IllegalStateException("POST failed: ${resp.code}")
+                throw IllegalStateException("POST failed: ${resp.code} - $respBody")
             }
             return respBody
         }

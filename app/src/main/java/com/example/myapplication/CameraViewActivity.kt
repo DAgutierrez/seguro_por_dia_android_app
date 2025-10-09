@@ -194,15 +194,16 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                     android.util.Log.d("SupabasePrecheck", "body: $bodyJson")
                     val responseText = SupabaseClientProvider.postJson(p.url, bodyJson)
                     android.util.Log.d("SupabasePrecheck", "response: $responseText")
-                    val value = extractValueFromJson(responseText, p.responseAttribute)
-                    val responseJson = org.json.JSONObject(responseText)
-                    val success = responseJson.getBoolean("success")
-                    android.util.Log.d("SupabasePrecheck", "succesRes: $success")
-
-                    //android.util.Log.d("SupabasePrecheck", "value: $value")
-                    //android.util.Log.d("SupabasePrecheck", "p: $p")
-                    //val success = value == p.responseValue
-                    //android.util.Log.d("SupabasePrecheck", "success: $success")
+                    
+                    // Parse response safely
+                    val success = try {
+                        val responseJson = org.json.JSONObject(responseText)
+                        responseJson.getBoolean("success")
+                    } catch (e: Exception) {
+                        android.util.Log.e("SupabasePrecheck", "Error parsing response JSON: ${e.message}")
+                        false
+                    }
+                    android.util.Log.d("SupabasePrecheck", "success: $success")
                     runOnUiThread {
                         updatePrecheckProgress(
                             overlayRef,
@@ -224,15 +225,26 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                 }
                 
                 runOnUiThread {
-                    dismissPrecheckProgress(overlayRef)
-                    finishWithSuccess(uploadedPublicUrl)
+                    try {
+                        dismissPrecheckProgress(overlayRef)
+                        finishWithSuccess(uploadedPublicUrl)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error in final success flow: ${e.message}")
+                        // Fallback: try to finish anyway
+                        try {
+                            finishWithSuccess(uploadedPublicUrl)
+                        } catch (e2: Exception) {
+                            Log.e(TAG, "Error in fallback finish: ${e2.message}")
+                            finish()
+                        }
+                    }
                 }
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Precheck error: ${e.message}")
                 runOnUiThread {
                     dismissPrecheckProgress(overlayRef)
-                    SupabaseClientProvider.deleteImage(storagePath)
+                    //SupabaseClientProvider.deleteImage(storagePath)
                     binding.captureButton.isEnabled = true
                     showInfoDialog("Error en validación: ${e.message}")
                     android.widget.Toast.makeText(this@CameraViewActivity, "Error en validación, foto eliminada", android.widget.Toast.LENGTH_SHORT).show()
@@ -242,13 +254,23 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
     }
 
     private fun finishWithSuccess(uploadedPublicUrl: String) {
-        val result = android.content.Intent().apply {
-            putExtra("uploadedUrl", uploadedPublicUrl)
-            putExtra("slot", captureSlot)
+        try {
+            val result = android.content.Intent().apply {
+                putExtra("uploadedUrl", uploadedPublicUrl)
+                putExtra("slot", captureSlot)
+            }
+            setResult(android.app.Activity.RESULT_OK, result)
+            android.widget.Toast.makeText(this, "Foto validada y subida", android.widget.Toast.LENGTH_SHORT).show()
+            finish()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in finishWithSuccess: ${e.message}")
+            // Fallback: just finish without extras
+            try {
+                finish()
+            } catch (e2: Exception) {
+                Log.e(TAG, "Error in fallback finish: ${e2.message}")
+            }
         }
-        setResult(android.app.Activity.RESULT_OK, result)
-        android.widget.Toast.makeText(this, "Foto validada y subida", android.widget.Toast.LENGTH_SHORT).show()
-        finish()
     }
 
     private fun extractValueFromJson(jsonText: String, attribute: String): String? {
@@ -327,11 +349,19 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
 
     private fun dismissPrecheckProgress(overlayRef: android.widget.FrameLayout?) {
         runOnUiThread {
-            Log.d(TAG, "dismissPrecheckProgress: removing overlay=$overlayRef")
-            val rootView = findViewById<android.view.ViewGroup>(android.R.id.content)
-            overlayRef?.let { 
-                rootView.removeView(it)
-                Log.d(TAG, "Overlay removed successfully")
+            try {
+                Log.d(TAG, "dismissPrecheckProgress: removing overlay=$overlayRef")
+                val rootView = findViewById<android.view.ViewGroup>(android.R.id.content)
+                overlayRef?.let { 
+                    if (overlayRef.parent != null) {
+                        rootView.removeView(overlayRef)
+                        Log.d(TAG, "Overlay removed successfully")
+                    } else {
+                        Log.d(TAG, "Overlay already removed or has no parent")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error dismissing precheck progress: ${e.message}")
             }
         }
     }

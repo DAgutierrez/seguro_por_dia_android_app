@@ -197,26 +197,40 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         Log.d("InspectionActivity", "onActivityResult: requestCode=$requestCode resultCode=$resultCode dataExtras=${data?.extras}")
-        if (resultCode == Activity.RESULT_OK && data != null) {
-            val baseUrl = data.getStringExtra("uploadedUrl") ?: run {
-                Log.w("InspectionActivity", "Missing uploadedUrl in result")
-                return
-            }
-            val slot = data.getStringExtra("slot") ?: run {
-                Log.w("InspectionActivity", "Missing slot in result")
-                return
-            }
-            // persist latest preview URL for this slot
-            latestPreviewUrlBySlot[slot] = baseUrl
+        
+        try {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                val baseUrl = data.getStringExtra("uploadedUrl") ?: run {
+                    Log.w("InspectionActivity", "Missing uploadedUrl in result")
+                    return
+                }
+                val slot = data.getStringExtra("slot") ?: run {
+                    Log.w("InspectionActivity", "Missing slot in result")
+                    return
+                }
+                
+                // Validate URL format
+                if (baseUrl.isBlank() || !baseUrl.startsWith("http")) {
+                    Log.w("InspectionActivity", "Invalid URL format: $baseUrl")
+                    return
+                }
+                
+                // persist latest preview URL for this slot
+                latestPreviewUrlBySlot[slot] = baseUrl
 
-            val target = previews[slot]
-            if (target == null) {
-                Log.w("InspectionActivity", "Preview not ready yet for slot='$slot'. Queueing pending load. Currently available keys=${previews.keys}")
-                pendingPreviewLoads.add(slot to baseUrl)
-                return
+                val target = previews[slot]
+                if (target == null) {
+                    Log.w("InspectionActivity", "Preview not ready yet for slot='$slot'. Queueing pending load. Currently available keys=${previews.keys}")
+                    pendingPreviewLoads.add(slot to baseUrl)
+                    return
+                }
+                Log.d("InspectionActivity", "Preparing to load preview for slot='$slot' url='$baseUrl'")
+                loadImageWithRetry(target, baseUrl)
+            } else if (resultCode != Activity.RESULT_CANCELED) {
+                Log.w("InspectionActivity", "Unexpected result code: $resultCode")
             }
-            Log.d("InspectionActivity", "Preparing to load preview for slot='$slot' url='$baseUrl'")
-            loadImageWithRetry(target, baseUrl)
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error in onActivityResult: ${e.message}")
         }
     }
 
@@ -226,42 +240,50 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     }
 
     private fun loadImageWithRetry(targetView: ImageView, baseUrl: String, attempt: Int = 1, maxAttempts: Int = 4) {
-        val url = buildCacheBustedUrl(baseUrl)
-        Log.d("InspectionActivity", "Loading image (attempt $attempt/$maxAttempts): $url into=$targetView")
-        Glide.with(this)
-            .load(url)
-            .diskCacheStrategy(DiskCacheStrategy.NONE)
-            .skipMemoryCache(true)
-            .dontAnimate()
-            .listener(object : RequestListener<Drawable> {
-                override fun onLoadFailed(
-                    e: GlideException?,
-                    model: Any?,
-                    target: Target<Drawable>,
-                    isFirstResource: Boolean
-                ): Boolean {
-                    Log.w("InspectionActivity", "Glide onLoadFailed attempt=$attempt err=${e?.localizedMessage} model=$model target=$target first=$isFirstResource")
-                    if (attempt < maxAttempts) {
-                        launch {
-                            delay(350L * attempt)
-                            loadImageWithRetry(targetView, baseUrl, attempt + 1, maxAttempts)
+        try {
+            val url = buildCacheBustedUrl(baseUrl)
+            Log.d("InspectionActivity", "Loading image (attempt $attempt/$maxAttempts): $url into=$targetView")
+            Glide.with(this)
+                .load(url)
+                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .skipMemoryCache(true)
+                .dontAnimate()
+                .listener(object : RequestListener<Drawable> {
+                    override fun onLoadFailed(
+                        e: GlideException?,
+                        model: Any?,
+                        target: Target<Drawable>,
+                        isFirstResource: Boolean
+                    ): Boolean {
+                        Log.w("InspectionActivity", "Glide onLoadFailed attempt=$attempt err=${e?.localizedMessage} model=$model target=$target first=$isFirstResource")
+                        if (attempt < maxAttempts) {
+                            launch {
+                                try {
+                                    delay(350L * attempt)
+                                    loadImageWithRetry(targetView, baseUrl, attempt + 1, maxAttempts)
+                                } catch (e: Exception) {
+                                    Log.e("InspectionActivity", "Error in retry: ${e.message}")
+                                }
+                            }
                         }
+                        return false
                     }
-                    return false
-                }
 
-                override fun onResourceReady(
-                    resource: Drawable,
-                    model: Any,
-                    target: Target<Drawable>,
-                    dataSource: DataSource,
-                    isFirstResource: Boolean
-                ): Boolean {
-                    Log.d("InspectionActivity", "Glide onResourceReady attempt=$attempt source=$dataSource first=$isFirstResource target=$target")
-                    return false
-                }
-            })
-            .into(targetView)
+                    override fun onResourceReady(
+                        resource: Drawable,
+                        model: Any,
+                        target: Target<Drawable>,
+                        dataSource: DataSource,
+                        isFirstResource: Boolean
+                    ): Boolean {
+                        Log.d("InspectionActivity", "Glide onResourceReady attempt=$attempt source=$dataSource first=$isFirstResource target=$target")
+                        return false
+                    }
+                })
+                .into(targetView)
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error in loadImageWithRetry: ${e.message}")
+        }
     }
 }
 
