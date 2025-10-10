@@ -27,6 +27,10 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     private val previews = hashMapOf<String, ImageView>()
     private val pendingPreviewLoads = mutableListOf<Pair<String, String>>() // slot to baseUrl
     private val latestPreviewUrlBySlot = hashMapOf<String, String>() // persisted across rotation
+    
+    // UI elements for precheck progress
+    private val slotProgressOverlays = hashMapOf<String, android.view.View>()
+    private val slotStatusTexts = hashMapOf<String, TextView>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,9 +104,13 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             
             val imageView = slotLayout.findViewById<ImageView>(R.id.slot_image)
             val titleView = slotLayout.findViewById<TextView>(R.id.slot_title)
+            val progressOverlay = slotLayout.findViewById<android.view.View>(R.id.slot_progress_overlay)
+            val statusText = slotLayout.findViewById<TextView>(R.id.slot_status)
             
             titleView.text = inspectionView.description
             previews[slotId] = imageView
+            slotProgressOverlays[slotId] = progressOverlay
+            slotStatusTexts[slotId] = statusText
             
             slotLayout.setOnClickListener {
                 val intent = Intent(this, LoadingActivity::class.java)
@@ -163,9 +171,13 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             
             val imageView = slotLayout.findViewById<ImageView>(R.id.slot_image)
             val titleView = slotLayout.findViewById<TextView>(R.id.slot_title)
+            val progressOverlay = slotLayout.findViewById<android.view.View>(R.id.slot_progress_overlay)
+            val statusText = slotLayout.findViewById<TextView>(R.id.slot_status)
             
             titleView.text = slot.replace('_', ' ').replaceFirstChar { it.titlecase() }
             previews[slot] = imageView
+            slotProgressOverlays[slot] = progressOverlay
+            slotStatusTexts[slot] = statusText
             
             slotLayout.setOnClickListener {
                 val intent = Intent(this, LoadingActivity::class.java)
@@ -216,6 +228,8 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                     Log.w("InspectionActivity", "Missing slot in result")
                     return
                 }
+                val storagePath = data.getStringExtra("storagePath") ?: ""
+                val inspectionViewId = data.getIntExtra("inspectionViewId", -1)
                 
                 // Validate URL format
                 if (baseUrl.isBlank() || !baseUrl.startsWith("http")) {
@@ -232,8 +246,16 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                     pendingPreviewLoads.add(slot to baseUrl)
                     return
                 }
-                Log.d("InspectionActivity", "Preparing to load preview for slot='$slot' url='$baseUrl'")
+                
+                Log.d("InspectionActivity", "Loading preview and starting precheck for slot='$slot'")
+                
+                // Load image immediately
                 loadImageWithRetry(target, baseUrl)
+                
+                // Start precheck in background
+                if (inspectionViewId > 0 && storagePath.isNotEmpty()) {
+                    startPrecheckInBackground(slot, storagePath, baseUrl, inspectionViewId)
+                }
             } else if (resultCode != Activity.RESULT_CANCELED) {
                 Log.w("InspectionActivity", "Unexpected result code: $resultCode")
             }
@@ -291,6 +313,115 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 .into(targetView)
         } catch (e: Exception) {
             Log.e("InspectionActivity", "Error in loadImageWithRetry: ${e.message}")
+        }
+    }
+    
+    private fun startPrecheckInBackground(slot: String, storagePath: String, uploadedPublicUrl: String, inspectionViewId: Int) {
+        Log.d("InspectionActivity", "Starting precheck in background for slot=$slot")
+        
+        // Show progress overlay
+        slotProgressOverlays[slot]?.visibility = android.view.View.VISIBLE
+        slotStatusTexts[slot]?.text = "Validando..."
+        slotStatusTexts[slot]?.setTextColor(0xFF1976D2.toInt())
+        
+        launch(Dispatchers.IO) {
+            try {
+                val prechecks = SupabaseClientProvider.getPrechecksForInspectionView(inspectionViewId)
+                Log.d("InspectionActivity", "Found ${prechecks.size} prechecks for inspectionViewId=$inspectionViewId")
+                
+                if (prechecks.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        slotProgressOverlays[slot]?.visibility = android.view.View.GONE
+                        slotStatusTexts[slot]?.text = "Validado ✓"
+                        slotStatusTexts[slot]?.setTextColor(0xFF4CAF50.toInt())
+                    }
+                    return@launch
+                }
+                
+                for (i in prechecks.indices) {
+                    val p = prechecks[i]
+                    
+                    withContext(Dispatchers.Main) {
+                        slotStatusTexts[slot]?.text = "Validando paso ${i + 1} de ${prechecks.size}"
+                    }
+                    
+                    val bodyJson = org.json.JSONObject().apply {
+                        put("imageUrl", storagePath)
+                        put("responseValue", p.responseValue)
+                    }.toString()
+                    
+                    val responseText = SupabaseClientProvider.postJson(p.url, bodyJson)
+                    
+                    val success = try {
+                        val responseJson = org.json.JSONObject(responseText)
+                        responseJson.getBoolean("success")
+                    } catch (e: Exception) {
+                        Log.e("InspectionActivity", "Error parsing response JSON: ${e.message}")
+                        false
+                    }
+                    
+                    if (!success) {
+                        withContext(Dispatchers.Main) {
+                            slotProgressOverlays[slot]?.visibility = android.view.View.GONE
+                            slotStatusTexts[slot]?.text = "Error: ${p.errorMessage}"
+                            slotStatusTexts[slot]?.setTextColor(0xFFF44336.toInt())
+                            
+                            // Show error dialog
+                            android.app.AlertDialog.Builder(this@InspectionActivity)
+                                .setTitle("Validación Fallida")
+                                .setMessage("${p.errorMessage}\n\nLa imagen será eliminada.")
+                                .setPositiveButton("Entendido") { dialog, _ ->
+                                    dialog.dismiss()
+                                }
+                                .setCancelable(false)
+                                .show()
+                            
+                            // Delete image
+                            launch(Dispatchers.IO) {
+                                try {
+                                    SupabaseClientProvider.deleteImage(storagePath)
+                                    withContext(Dispatchers.Main) {
+                                        previews[slot]?.setImageResource(R.drawable.ic_camera_placeholder)
+                                        slotStatusTexts[slot]?.text = "Toca para capturar"
+                                        slotStatusTexts[slot]?.setTextColor(0xFF757575.toInt())
+                                        latestPreviewUrlBySlot.remove(slot)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("InspectionActivity", "Error deleting image: ${e.message}")
+                                }
+                            }
+                        }
+                        return@launch
+                    }
+                }
+                
+                // All prechecks passed
+                withContext(Dispatchers.Main) {
+                    slotProgressOverlays[slot]?.visibility = android.view.View.GONE
+                    slotStatusTexts[slot]?.text = "Validado ✓"
+                    slotStatusTexts[slot]?.setTextColor(0xFF4CAF50.toInt())
+                    
+                    android.widget.Toast.makeText(
+                        this@InspectionActivity,
+                        "Imagen validada exitosamente",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+                
+            } catch (e: Exception) {
+                Log.e("InspectionActivity", "Precheck error: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    slotProgressOverlays[slot]?.visibility = android.view.View.GONE
+                    slotStatusTexts[slot]?.text = "Error en validación"
+                    slotStatusTexts[slot]?.setTextColor(0xFFF44336.toInt())
+                    
+                    android.widget.Toast.makeText(
+                        this@InspectionActivity,
+                        "Error en validación: ${e.message}",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
         }
     }
 }

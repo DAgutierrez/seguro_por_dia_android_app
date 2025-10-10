@@ -27,13 +27,39 @@
             app:cardElevation="2dp"
             app:cardBackgroundColor="#F5F7FA">
 
-            <ImageView
-                android:id="@+id/slot_image"
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="centerCrop"
-                android:src="@drawable/ic_camera_placeholder"
-                android:contentDescription="Vista previa" />
+                android:layout_height="match_parent">
+
+                <ImageView
+                    android:id="@+id/slot_image"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/ic_camera_placeholder"
+                    android:contentDescription="Vista previa" />
+
+                <!-- Progress Overlay -->
+                <LinearLayout
+                    android:id="@+id/slot_progress_overlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="#CC000000"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/slot_progress_indicator"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:indeterminate="true"
+                        app:indicatorColor="#FFFFFF"
+                        app:trackThickness="3dp" />
+
+                </LinearLayout>
+
+            </FrameLayout>
 
         </androidx.cardview.widget.CardView>
 
@@ -55,6 +81,7 @@
                 android:layout_marginBottom="4dp" />
 
             <TextView
+                android:id="@+id/slot_status"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Toca para capturar"

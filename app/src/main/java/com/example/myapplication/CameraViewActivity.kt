@@ -120,16 +120,25 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                                 val uploadedPublicUrl = SupabaseClientProvider.uploadPng(bytes, pathPrefix = captureSlot ?: "")
                                 val storagePath = SupabaseClientProvider.storagePathFromPublicUrl(uploadedPublicUrl)
 
-                                // Run prechecks before returning - execute async on UI
-                                Log.d(TAG, "About to run prechecks with storagePath: $storagePath")
+                                Log.d(TAG, "Image uploaded successfully: $uploadedPublicUrl")
+                                
+                                // Return immediately to InspectionActivity with the uploaded URL and inspectionViewId
                                 runOnUiThread {
-                                    runPrechecksAsync(storagePath, uploadedPublicUrl)
+                                    val result = android.content.Intent().apply {
+                                        putExtra("uploadedUrl", uploadedPublicUrl)
+                                        putExtra("slot", captureSlot)
+                                        putExtra("storagePath", storagePath)
+                                        putExtra("inspectionViewId", inspectionViewId)
+                                    }
+                                    setResult(android.app.Activity.RESULT_OK, result)
+                                    android.widget.Toast.makeText(this@CameraViewActivity, "Foto subida", android.widget.Toast.LENGTH_SHORT).show()
+                                    finish()
                                 }
                             } catch (t: Throwable) {
-                                Log.e(TAG, "Upload/precheck failed: ${t.message}", t)
+                                Log.e(TAG, "Upload failed: ${t.message}", t)
                                 runOnUiThread {
                                     binding.captureButton.isEnabled = true
-                                    android.widget.Toast.makeText(this@CameraViewActivity, "Error: ${t.message}", android.widget.Toast.LENGTH_LONG).show()
+                                    android.widget.Toast.makeText(this@CameraViewActivity, "Error al subir: ${t.message}", android.widget.Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
