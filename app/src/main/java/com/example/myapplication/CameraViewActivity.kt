@@ -38,6 +38,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
     private var captureSlot: String? = null
     private var inspectionViewId: Int = -1
     private var inspectionViewDescription: String? = null
+    private var requiredCameraPosition: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,12 +48,19 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
         captureSlot = intent.getStringExtra("slot")
         inspectionViewId = intent.getIntExtra("inspectionViewId", -1)
         inspectionViewDescription = intent.getStringExtra("inspectionViewDescription")
+        requiredCameraPosition = intent.getStringExtra("cameraPosition")
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         try {
             initializeDetector()
             setupInitialUI()
+            
+            // Validate orientation immediately if we have a camera position requirement
+            if (requiredCameraPosition != null) {
+                Log.d(TAG, "Camera position requirement: $requiredCameraPosition")
+                validateOrientation()
+            }
 
             if (allPermissionsGranted()) {
                 startCamera()
@@ -83,6 +91,47 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
 
         } catch (e: Exception) {
             Log.e(TAG, "Error setting up initial UI: ${e.message}")
+        }
+    }
+
+    private fun getCurrentOrientation(): String {
+        return when (resources.configuration.orientation) {
+            Configuration.ORIENTATION_LANDSCAPE -> "horizontal"
+            Configuration.ORIENTATION_PORTRAIT -> "vertical"
+            else -> "unknown"
+        }
+    }
+
+    private fun validateOrientation() {
+        if (requiredCameraPosition == null || requiredCameraPosition == "both") {
+            // No restriction or both orientations allowed
+            binding.captureButton.isEnabled = true
+            binding.orientationWarning.visibility = android.view.View.GONE
+            return
+        }
+
+        val currentOrientation = getCurrentOrientation()
+        val isOrientationCorrect = currentOrientation == requiredCameraPosition
+
+        if (isOrientationCorrect) {
+            // Orientation is correct
+            binding.captureButton.isEnabled = true
+            binding.orientationWarning.visibility = android.view.View.GONE
+            Log.d(TAG, "Orientation is correct: $currentOrientation")
+        } else {
+            // Orientation is incorrect
+            binding.captureButton.isEnabled = false
+            
+            // Set appropriate warning message
+            val message = when (requiredCameraPosition) {
+                "horizontal" -> "Debes poner tu celular en horizontal"
+                "vertical" -> "Debes poner tu celular en vertical"
+                else -> "Orientación incorrecta"
+            }
+            
+            binding.orientationWarning.text = message
+            binding.orientationWarning.visibility = android.view.View.VISIBLE
+            Log.d(TAG, "Orientation is incorrect: $currentOrientation, required: $requiredCameraPosition")
         }
     }
 
@@ -630,6 +679,9 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
         super.onConfigurationChanged(newConfig)
         try {
             Log.d(TAG, "Configuration changed, orientation: ${newConfig.orientation}")
+
+            // Validate orientation with the new configuration
+            validateOrientation()
 
             // Reiniciar la cámara para adaptarse al nuevo layout
             if (allPermissionsGranted()) {

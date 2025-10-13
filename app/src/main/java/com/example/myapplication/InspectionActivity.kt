@@ -118,7 +118,8 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 intent.putExtra("slot", slotId)
                 intent.putExtra("inspectionViewId", inspectionView.id)
                 intent.putExtra("inspectionViewDescription", inspectionView.description)
-                Log.d("InspectionActivity", "Launching capture for slot=$slotId (id=${inspectionView.id})")
+                intent.putExtra("cameraPosition", inspectionView.camera_position)
+                Log.d("InspectionActivity", "Launching capture for slot=$slotId (id=${inspectionView.id}, camera_position=${inspectionView.camera_position})")
                 startActivityForResult(intent, requestCodeBySlot.getValue(slotId))
             }
             

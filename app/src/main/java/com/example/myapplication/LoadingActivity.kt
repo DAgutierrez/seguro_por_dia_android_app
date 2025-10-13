@@ -19,6 +19,7 @@ class LoadingActivity : AppCompatActivity() {
         val slot = intent.getStringExtra("slot")
         val inspectionViewId = intent.getIntExtra("inspectionViewId", -1)
         val inspectionViewDescription = intent.getStringExtra("inspectionViewDescription")
+        val cameraPosition = intent.getStringExtra("cameraPosition")
 
         launchRunnable = Runnable {
             if (isFinishing || launched) return@Runnable
@@ -28,6 +29,7 @@ class LoadingActivity : AppCompatActivity() {
             cameraIntent.putExtra("slot", slot)
             cameraIntent.putExtra("inspectionViewId", inspectionViewId)
             cameraIntent.putExtra("inspectionViewDescription", inspectionViewDescription)
+            cameraIntent.putExtra("cameraPosition", cameraPosition)
             startActivityForResult(cameraIntent, 9999)
         }
         handler.postDelayed(launchRunnable!!, 800)
