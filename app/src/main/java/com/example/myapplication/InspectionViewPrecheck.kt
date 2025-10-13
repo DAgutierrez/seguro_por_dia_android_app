@@ -11,5 +11,6 @@ data class InspectionViewPrecheck(
     @SerialName("response-attribute") val responseAttribute: String,
     @SerialName("response-value") val responseValue: String,
     @SerialName("success-message") val successMessage: String,
-    @SerialName("error-message") val errorMessage: String
+    @SerialName("error-message") val errorMessage: String,
+    val order: Int
 )

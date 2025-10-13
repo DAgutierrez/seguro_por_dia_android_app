@@ -44,18 +44,34 @@
                     android:id="@+id/slot_progress_overlay"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="#CC000000"
+                    android:background="#E0000000"
                     android:gravity="center"
                     android:orientation="vertical"
-                    android:visibility="gone">
+                    android:visibility="gone"
+                    android:padding="8dp">
 
                     <com.google.android.material.progressindicator.CircularProgressIndicator
                         android:id="@+id/slot_progress_indicator"
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
                         android:indeterminate="true"
                         app:indicatorColor="#FFFFFF"
-                        app:trackThickness="3dp" />
+                        app:trackThickness="4dp" />
+
+                    <TextView
+                        android:id="@+id/slot_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Validando..."
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center"
+                        android:maxLines="3"
+                        android:background="#80000000"
+                        android:padding="4dp"
+                        android:minHeight="20dp" />
 
                 </LinearLayout>
 
@@ -81,7 +97,7 @@
                 android:layout_marginBottom="4dp" />
 
             <TextView
-                android:id="@+id/slot_status"
+                android:id="@+id/slot_status_normal"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Toca para capturar"

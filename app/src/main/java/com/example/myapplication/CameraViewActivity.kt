@@ -228,14 +228,18 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                     return@execute
                 }
 
-                for (i in prechecks.indices) {
-                    val p = prechecks[i]
+                // Sort prechecks by order column
+                val sortedPrechecks = prechecks.sortedBy { it.order }
+                android.util.Log.d("SupabasePrecheck", "sorted prechecks by order: $sortedPrechecks")
+
+                for (i in sortedPrechecks.indices) {
+                    val p = sortedPrechecks[i]
                     
                     runOnUiThread {
                         updatePrecheckProgress(
                             overlayRef,
                             statusText = "Validando",
-                            detailText = "Paso ${i + 1} de ${prechecks.size}"
+                            detailText = "Paso ${i + 1} de ${sortedPrechecks.size} (Order: ${p.order})"
                         )
                     }
                     
@@ -255,27 +259,34 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                         android.util.Log.e("SupabasePrecheck", "Error parsing response JSON: ${e.message}")
                         false
                     }
-                    android.util.Log.d("SupabasePrecheck", "success: $success")
-                    runOnUiThread {
-                        updatePrecheckProgress(
-                            overlayRef,
-                            statusText = if (success) "Validado" else "Error",
-                            detailText = if (success) p.successMessage else p.errorMessage
-                        )
-                    }
                     
-                    if (!success) {
+                    // Check if this is the last precheck
+                    val isLastPrecheck = (i == sortedPrechecks.size - 1)
+                    
+                    android.util.Log.d("SupabasePrecheck", "success: $success")
+                    // if(!isLastPrecheck) {
+                    //     runOnUiThread {
+                    //         updatePrecheckProgress(
+                    //             overlayRef,
+                    //             statusText = if (success) "Validado" else "Error",
+                    //             detailText = if (success) p.successMessage else p.errorMessage
+                    //         )
+                    //     }
+                    // }
+                 
+                    
+                    if (!success && isLastPrecheck == false) {
                         runOnUiThread {
                             dismissPrecheckProgress(overlayRef)
-                            //showInfoDialog(p.errorMessage)
-                            // SupabaseClientProvider.deleteImage(storagePath)
                             binding.captureButton.isEnabled = true
                             android.widget.Toast.makeText(this@CameraViewActivity, "Foto rechazada: ${p.errorMessage}", android.widget.Toast.LENGTH_LONG).show()
                         }
                         return@execute
                     }
+                    
                 }
                 
+                // All prechecks passed
                 runOnUiThread {
                     try {
                         dismissPrecheckProgress(overlayRef)
@@ -322,6 +333,47 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
             } catch (e2: Exception) {
                 Log.e(TAG, "Error in fallback finish: ${e2.message}")
             }
+        }
+    }
+
+    private fun finishWithInspectionData(uploadedPublicUrl: String, estadoInspeccion: String, comentariosInspeccion: String) {
+        try {
+            val result = android.content.Intent().apply {
+                putExtra("uploadedUrl", uploadedPublicUrl)
+                putExtra("slot", captureSlot)
+                putExtra("inspectionViewId", inspectionViewId)
+                putExtra("estadoInspeccion", estadoInspeccion)
+                putExtra("comentariosInspeccion", comentariosInspeccion)
+                putExtra("hasInspectionData", true)
+            }
+            setResult(android.app.Activity.RESULT_OK, result)
+            android.widget.Toast.makeText(this, "Inspección completada: $estadoInspeccion", android.widget.Toast.LENGTH_SHORT).show()
+            finish()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in finishWithInspectionData: ${e.message}")
+            // Fallback: just finish without extras
+            try {
+                finish()
+            } catch (e2: Exception) {
+                Log.e(TAG, "Error in fallback finish: ${e2.message}")
+            }
+        }
+    }
+
+    private fun saveInspectionData(imageUrl: String, estadoInspeccion: String, comentariosInspeccion: String) {
+        try {
+            val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
+            val editor = sharedPref.edit()
+            val key = "${captureSlot}_${System.currentTimeMillis()}"
+            editor.putString("${key}_imageUrl", imageUrl)
+            editor.putString("${key}_estadoInspeccion", estadoInspeccion)
+            editor.putString("${key}_comentariosInspeccion", comentariosInspeccion)
+            editor.putString("${key}_inspectionViewId", inspectionViewId.toString())
+            editor.putLong("${key}_timestamp", System.currentTimeMillis())
+            editor.apply()
+            Log.d(TAG, "Inspection data saved locally with key: $key")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving inspection data: ${e.message}")
         }
     }
 

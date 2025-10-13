@@ -102,7 +102,7 @@ object SupabaseClientProvider {
 
     fun getPrechecksForInspectionView(inspectionViewId: Int): List<InspectionViewPrecheck> {
         val base = BuildConfig.SUPABASE_URL.trimEnd('/') + "/rest/v1/inspection-view-precheck"
-        val url = "$base?inspection-view-id=eq.$inspectionViewId"
+        val url = "$base?inspection-view-id=eq.$inspectionViewId&order=order.asc"
         android.util.Log.d("SupabasePrecheck", "Fetching prechecks from: $url")
         val request = Request.Builder()
             .url(url)

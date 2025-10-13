@@ -29,5 +29,13 @@
     <color name="zoom_button_normal_background">#40FFFFFF</color>
     <color name="zoom_button_pressed_background">#80FFFFFF</color>
     <color name="zoom_container_background">#CC000000</color>
+    
+    <!-- Inspection Detail Colors -->
+    <color name="background_color">#FAFAFA</color>
+    <color name="text_primary">#212121</color>
+    <color name="text_secondary">#757575</color>
+    <color name="status_pending">#FF9800</color>
+    <color name="status_approved">#4CAF50</color>
+    <color name="status_rejected">#F44336</color>
 
 </resources>

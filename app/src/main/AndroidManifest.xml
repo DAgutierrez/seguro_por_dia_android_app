@@ -54,6 +54,12 @@
             android:exported="false"
             android:theme="@style/Theme.YOLOv8TfLite" />
 
+        <activity
+            android:name=".InspectionDetailActivity"
+            android:exported="false"
+            android:theme="@style/Theme.YOLOv8TfLite"
+            android:parentActivityName=".InspectionActivity" />
+
         <uses-native-library
             android:name="libOpenCL.so"
             android:required="false"/>
