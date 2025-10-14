@@ -1,5 +1,6 @@
 package com.example.myapplication
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.widget.ImageView
@@ -7,12 +8,15 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.google.android.material.button.MaterialButton
 
 class InspectionDetailActivity : AppCompatActivity() {
     
     private lateinit var imageView: ImageView
     private lateinit var estadoTextView: TextView
     private lateinit var comentariosTextView: TextView
+    private lateinit var retakePhotoButton: MaterialButton
+    private var inspectionData: InspectionData? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,11 +34,13 @@ class InspectionDetailActivity : AppCompatActivity() {
         imageView = findViewById(R.id.inspection_image)
         estadoTextView = findViewById(R.id.estado_inspeccion)
         comentariosTextView = findViewById(R.id.comentarios_inspeccion)
+        retakePhotoButton = findViewById(R.id.retake_photo_button)
         
         // Get inspection data from intent
-        val inspectionData = intent.getSerializableExtra("inspectionData") as? InspectionData
+        inspectionData = intent.getSerializableExtra("inspectionData") as? InspectionData
         if (inspectionData != null) {
-            loadInspectionData(inspectionData)
+            loadInspectionData(inspectionData!!)
+            setupRetakeButton()
         } else {
             Log.e("InspectionDetailActivity", "No inspection data provided")
             finish()
@@ -95,6 +101,47 @@ class InspectionDetailActivity : AppCompatActivity() {
             
         } catch (e: Exception) {
             Log.e("InspectionDetailActivity", "Error loading inspection data: ${e.message}")
+        }
+    }
+    
+    private fun setupRetakeButton() {
+        retakePhotoButton.setOnClickListener {
+            inspectionData?.let { data ->
+                // Delete existing inspection data for this slot
+                deleteInspectionDataForSlot(data.slot)
+                
+                // Launch camera to retake photo
+                val intent = Intent(this, LoadingActivity::class.java)
+                intent.putExtra("captureMode", true)
+                intent.putExtra("slot", data.slot)
+                intent.putExtra("inspectionViewId", data.inspectionViewId)
+                intent.putExtra("inspectionViewDescription", "Re-captura de inspección")
+                intent.putExtra("cameraPosition", null as String?) // Will be fetched from InspectionView
+                
+                Log.d("InspectionDetailActivity", "Launching retake capture for slot=${data.slot}")
+                startActivity(intent)
+                
+                // Finish this activity to return to InspectionActivity
+                finish()
+            }
+        }
+    }
+    
+    private fun deleteInspectionDataForSlot(slot: String) {
+        try {
+            val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
+            val allKeys = sharedPref.all.keys
+            val slotKeys = allKeys.filter { it.startsWith("${slot}_") }
+            
+            val editor = sharedPref.edit()
+            slotKeys.forEach { key ->
+                editor.remove(key)
+            }
+            editor.apply()
+            
+            Log.d("InspectionDetailActivity", "Deleted inspection data for slot: $slot")
+        } catch (e: Exception) {
+            Log.e("InspectionDetailActivity", "Error deleting inspection data: ${e.message}")
         }
     }
 }

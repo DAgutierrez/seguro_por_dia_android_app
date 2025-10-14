@@ -42,6 +42,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     private val slotProgressOverlays = hashMapOf<String, android.view.View>()
     private val slotStatusTexts = hashMapOf<String, TextView>()
     private val slotStatusNormalTexts = hashMapOf<String, TextView>()
+    private val slotCameraIcons = hashMapOf<String, android.view.View>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,12 +120,14 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             val progressOverlay = slotLayout.findViewById<android.view.View>(R.id.slot_progress_overlay)
             val statusText = slotLayout.findViewById<TextView>(R.id.slot_status)
             val statusNormalText = slotLayout.findViewById<TextView>(R.id.slot_status_normal)
+            val cameraIcon = slotLayout.findViewById<android.view.View>(R.id.slot_camera_icon)
             
             titleView.text = inspectionView.description
             previews[slotId] = imageView
             slotProgressOverlays[slotId] = progressOverlay
             slotStatusTexts[slotId] = statusText
             slotStatusNormalTexts[slotId] = statusNormalText
+            slotCameraIcons[slotId] = cameraIcon
             
             slotLayout.setOnClickListener {
                 // Check if there's inspection data for this slot
@@ -200,12 +203,14 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             val progressOverlay = slotLayout.findViewById<android.view.View>(R.id.slot_progress_overlay)
             val statusText = slotLayout.findViewById<TextView>(R.id.slot_status)
             val statusNormalText = slotLayout.findViewById<TextView>(R.id.slot_status_normal)
+            val cameraIcon = slotLayout.findViewById<android.view.View>(R.id.slot_camera_icon)
             
             titleView.text = slot.replace('_', ' ').replaceFirstChar { it.titlecase() }
             previews[slot] = imageView
             slotProgressOverlays[slot] = progressOverlay
             slotStatusTexts[slot] = statusText
             slotStatusNormalTexts[slot] = statusNormalText
+            slotCameraIcons[slot] = cameraIcon
             
             slotLayout.setOnClickListener {
                 val intent = Intent(this, LoadingActivity::class.java)
@@ -363,8 +368,9 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     private fun startPrecheckInBackground(slot: String, storagePath: String, uploadedPublicUrl: String, inspectionViewId: Int) {
         Log.d("InspectionActivity", "Starting precheck in background for slot=$slot")
         
-        // Show progress overlay
+        // Show progress overlay and hide camera icon
         slotProgressOverlays[slot]?.visibility = android.view.View.VISIBLE
+        slotCameraIcons[slot]?.visibility = android.view.View.GONE
         slotStatusTexts[slot]?.text = "Validando..."
         slotStatusTexts[slot]?.setTextColor(0xFF1976D2.toInt())
         
@@ -376,6 +382,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 if (prechecks.isEmpty()) {
                     withContext(Dispatchers.Main) {
                         slotProgressOverlays[slot]?.visibility = android.view.View.GONE
+                        slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
                         slotStatusNormalTexts[slot]?.text = "Validado ✓"
                         slotStatusNormalTexts[slot]?.setTextColor(0xFF4CAF50.toInt())
                         Log.d("InspectionActivity", "No prechecks found, hiding overlay for slot: $slot")
@@ -430,10 +437,9 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                     if (!success && !isLastPrecheck) {
                         withContext(Dispatchers.Main) {
                             slotProgressOverlays[slot]?.visibility = android.view.View.GONE
-                            slotStatusTexts[slot]?.text = "Error: ${p.errorMessage}"
-                            slotStatusTexts[slot]?.setTextColor(0xFFF44336.toInt())
+                            slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
                             
-                            // Show error dialog
+                            // Show error dialog with the error message from the precheck
                             android.app.AlertDialog.Builder(this@InspectionActivity)
                                 .setTitle("Validación Fallida")
                                 .setMessage("${p.errorMessage}\n\nLa imagen será eliminada.")
@@ -443,15 +449,19 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                                 .setCancelable(false)
                                 .show()
                             
-                            // Delete image
+                            // Delete image and reset preview
                             launch(Dispatchers.IO) {
                                 try {
                                     SupabaseClientProvider.deleteImage(storagePath)
                                     withContext(Dispatchers.Main) {
+                                        // Reset image to placeholder
                                         previews[slot]?.setImageResource(R.drawable.ic_camera_placeholder)
-                                        slotStatusTexts[slot]?.text = "Toca para capturar"
-                                        slotStatusTexts[slot]?.setTextColor(0xFF757575.toInt())
+                                        // Reset status text to normal state
+                                        slotStatusNormalTexts[slot]?.text = "Toca para capturar"
+                                        slotStatusNormalTexts[slot]?.setTextColor(0xFF757575.toInt())
+                                        // Remove from latest preview URLs so it can be captured again
                                         latestPreviewUrlBySlot.remove(slot)
+                                        Log.d("InspectionActivity", "Image deleted and preview reset for slot: $slot")
                                     }
                                 } catch (e: Exception) {
                                     Log.e("InspectionActivity", "Error deleting image: ${e.message}")
@@ -484,6 +494,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                                 updateSlotStatusWithInspection(slot, estadoInspeccion)
                                 
                                 slotProgressOverlays[slot]?.visibility = android.view.View.GONE
+                                slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
                                 
                                 android.widget.Toast.makeText(
                                     this@InspectionActivity,
@@ -504,6 +515,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 if (!inspectionDataHandled) {
                     withContext(Dispatchers.Main) {
                         slotProgressOverlays[slot]?.visibility = android.view.View.GONE
+                        slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
                         slotStatusNormalTexts[slot]?.text = "Validado ✓"
                         slotStatusNormalTexts[slot]?.setTextColor(0xFF4CAF50.toInt())
                         
@@ -519,6 +531,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 Log.e("InspectionActivity", "Precheck error: ${e.message}", e)
                 withContext(Dispatchers.Main) {
                     slotProgressOverlays[slot]?.visibility = android.view.View.GONE
+                    slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
                     slotStatusTexts[slot]?.text = "Error en validación"
                     slotStatusTexts[slot]?.setTextColor(0xFFF44336.toInt())
                     

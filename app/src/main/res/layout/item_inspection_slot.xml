@@ -39,41 +39,6 @@
                     android:src="@drawable/ic_camera_placeholder"
                     android:contentDescription="Vista previa" />
 
-                <!-- Progress Overlay -->
-                <LinearLayout
-                    android:id="@+id/slot_progress_overlay"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="#E0000000"
-                    android:gravity="center"
-                    android:orientation="vertical"
-                    android:visibility="gone"
-                    android:padding="8dp">
-
-                    <com.google.android.material.progressindicator.CircularProgressIndicator
-                        android:id="@+id/slot_progress_indicator"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:indeterminate="true"
-                        app:indicatorColor="#FFFFFF"
-                        app:trackThickness="4dp" />
-
-                    <TextView
-                        android:id="@+id/slot_status"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Validando..."
-                        android:textColor="#FFFFFF"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:layout_marginTop="8dp"
-                        android:gravity="center"
-                        android:maxLines="3"
-                        android:background="#80000000"
-                        android:padding="4dp"
-                        android:minHeight="20dp" />
-
-                </LinearLayout>
 
             </FrameLayout>
 
@@ -106,18 +71,64 @@
 
         </LinearLayout>
 
-        <!-- Arrow Icon -->
+        <!-- Progress Section (Right Side) -->
         <LinearLayout
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/material_circle_background"
-            android:gravity="center">
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginEnd="8dp">
 
-            <TextView
+            <!-- Progress Overlay -->
+            <LinearLayout
+                android:id="@+id/slot_progress_overlay"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="📷"
-                android:textSize="20sp" />
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone"
+                android:padding="8dp"
+                android:minWidth="80dp">
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/slot_progress_indicator"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:indeterminate="true"
+                    app:indicatorColor="#1976D2"
+                    app:trackThickness="3dp" />
+
+                <TextView
+                    android:id="@+id/slot_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Validando..."
+                    android:textColor="#1976D2"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center"
+                    android:maxLines="2"
+                    android:maxWidth="80dp"
+                    android:ellipsize="end" />
+
+            </LinearLayout>
+
+            <!-- Arrow Icon -->
+            <LinearLayout
+                android:id="@+id/slot_camera_icon"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/material_circle_background"
+                android:gravity="center">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📷"
+                    android:textSize="20sp" />
+
+            </LinearLayout>
 
         </LinearLayout>
 

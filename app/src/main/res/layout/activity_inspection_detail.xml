@@ -88,6 +88,7 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="2dp">
 
@@ -118,6 +119,22 @@
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>
+
+            <!-- Action Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/retake_photo_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📷 Volver a sacar foto"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:padding="16dp"
+                android:layout_marginTop="8dp"
+                app:cornerRadius="12dp"
+                app:backgroundTint="@color/status_pending"
+                android:textColor="@android:color/white"
+                android:drawableStart="@android:drawable/ic_menu_camera"
+                android:drawablePadding="8dp" />
 
         </LinearLayout>
 
