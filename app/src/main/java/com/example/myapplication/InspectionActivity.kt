@@ -146,8 +146,9 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                     intent.putExtra("inspectionViewId", inspectionView.id)
                     intent.putExtra("inspectionViewDescription", inspectionView.description)
                     intent.putExtra("cameraPosition", inspectionView.camera_position)
-                    Log.d("InspectionActivity", "Launching capture for slot=$slotId (id=${inspectionView.id}, camera_position=${inspectionView.camera_position})")
-                    startActivityForResult(intent, requestCodeBySlot.getValue(slotId))
+                    val requestCode = requestCodeBySlot.getValue(slotId)
+                    Log.d("InspectionActivity", "Launching capture for slot=$slotId (id=${inspectionView.id}, camera_position=${inspectionView.camera_position}) with requestCode=$requestCode")
+                    startActivityForResult(intent, requestCode)
                 }
             }
             
@@ -216,8 +217,9 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 val intent = Intent(this, LoadingActivity::class.java)
                 intent.putExtra("captureMode", true)
                 intent.putExtra("slot", slot)
-                Log.d("InspectionActivity", "Launching capture (fallback) for slot=$slot")
-                startActivityForResult(intent, requestCodeBySlot.getValue(slot))
+                val requestCode = requestCodeBySlot.getValue(slot)
+                Log.d("InspectionActivity", "Launching capture (fallback) for slot=$slot with requestCode=$requestCode")
+                startActivityForResult(intent, requestCode)
             }
             
             container.addView(slotLayout)
@@ -252,6 +254,9 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
         Log.d("InspectionActivity", "onActivityResult: requestCode=$requestCode resultCode=$resultCode dataExtras=${data?.extras}")
         
         try {
+            Log.d("InspectionActivity", "onActivityResult: requestCode=$requestCode, resultCode=$resultCode, data=${data != null}")
+            Log.d("InspectionActivity", "requestCodeBySlot map: $requestCodeBySlot")
+            
             // Handle result from InspectionDetailActivity (retake photo)
             if (requestCode >= 2000) {
                 Log.d("InspectionActivity", "Received result from InspectionDetailActivity, requestCode=$requestCode")
@@ -262,6 +267,8 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                     Log.d("InspectionActivity", "InspectionDetailActivity returned without data or cancelled")
                     return
                 }
+            } else {
+                Log.d("InspectionActivity", "Received result from direct camera capture, requestCode=$requestCode")
             }
             if (resultCode == Activity.RESULT_OK && data != null) {
                 val baseUrl = data.getStringExtra("uploadedUrl") ?: run {
@@ -291,14 +298,14 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 if (target == null) {
                     Log.w("InspectionActivity", "Preview not ready yet for slot='$slot'. Queueing pending load. Currently available keys=${previews.keys}")
                     pendingPreviewLoads.add(slot to baseUrl)
-                    return
+                } else {
+                    Log.d("InspectionActivity", "Loading preview for slot='$slot'")
+                    // Load image immediately
+                    loadImageWithRetry(target, baseUrl)
                 }
                 
-                Log.d("InspectionActivity", "Loading preview and starting precheck for slot='$slot'")
+                Log.d("InspectionActivity", "Continuing with precheck decision for slot='$slot'")
                 Log.d("InspectionActivity", "Debug values: inspectionViewId=$inspectionViewId, storagePath='$storagePath', hasInspectionData=$hasInspectionData")
-                
-                // Load image immediately
-                loadImageWithRetry(target, baseUrl)
                 
                 // Handle inspection data if present
                 if (hasInspectionData && estadoInspeccion != null && comentariosInspeccion != null) {
@@ -382,12 +389,37 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     
     private fun startPrecheckInBackground(slot: String, storagePath: String, uploadedPublicUrl: String, inspectionViewId: Int) {
         Log.d("InspectionActivity", "Starting precheck in background for slot=$slot")
+        Log.d("InspectionActivity", "UI refs available? overlay=${slotProgressOverlays.containsKey(slot)} statusText=${slotStatusTexts.containsKey(slot)} normalText=${slotStatusNormalTexts.containsKey(slot)} cameraIcon=${slotCameraIcons.containsKey(slot)}")
         
         // Show progress overlay and hide camera icon
         slotProgressOverlays[slot]?.visibility = android.view.View.VISIBLE
         slotCameraIcons[slot]?.visibility = android.view.View.GONE
         slotStatusTexts[slot]?.text = "Validando..."
         slotStatusTexts[slot]?.setTextColor(0xFF1976D2.toInt())
+        // Fallback: also reflect progress in the normal status area in case overlay is not visible yet
+        slotStatusNormalTexts[slot]?.text = "Validando..."
+        slotStatusNormalTexts[slot]?.setTextColor(0xFF1976D2.toInt())
+        Log.d("InspectionActivity", "Progress UI updated for slot=$slot: overlayVisible=${slotProgressOverlays[slot]?.visibility == android.view.View.VISIBLE}")
+
+        // If UI refs aren't ready yet (first time, inflation delay), wait briefly and then show overlay
+        if (!slotProgressOverlays.containsKey(slot) || !slotStatusTexts.containsKey(slot) || !slotCameraIcons.containsKey(slot)) {
+            launch {
+                repeat(12) { // ~1.2s total
+                    delay(100)
+                    if (slotProgressOverlays.containsKey(slot) && slotStatusTexts.containsKey(slot) && slotCameraIcons.containsKey(slot)) {
+                        withContext(Dispatchers.Main) {
+                            slotProgressOverlays[slot]?.visibility = android.view.View.VISIBLE
+                            slotCameraIcons[slot]?.visibility = android.view.View.GONE
+                            slotStatusTexts[slot]?.text = "Validando..."
+                            slotStatusTexts[slot]?.setTextColor(0xFF1976D2.toInt())
+                            Log.d("InspectionActivity", "Delayed UI setup applied for slot=$slot (overlay now visible)")
+                        }
+                        return@launch
+                    }
+                }
+                Log.w("InspectionActivity", "UI refs still not ready after wait for slot=$slot; continuing without overlay")
+            }
+        }
         
         launch(Dispatchers.IO) {
             try {
@@ -400,6 +432,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                         slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
                         slotStatusNormalTexts[slot]?.text = "Validado ✓"
                         slotStatusNormalTexts[slot]?.setTextColor(0xFF4CAF50.toInt())
+                        Log.d("InspectionActivity", "Prechecks empty → marking as valid for slot=$slot")
                         Log.d("InspectionActivity", "No prechecks found, hiding overlay for slot: $slot")
                     }
                     return@launch
@@ -416,8 +449,12 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                     val isLastPrecheck = (i == sortedPrechecks.size - 1)
                     
                     withContext(Dispatchers.Main) {
-                        slotStatusTexts[slot]?.text = "Validando paso ${i + 1} de ${sortedPrechecks.size} (Order: ${p.order})"
-                        Log.d("InspectionActivity", "Updated status for slot $slot: paso ${i + 1} de ${sortedPrechecks.size}, order: ${p.order}")
+                        val stepMsg = "Validando paso ${i + 1} de ${sortedPrechecks.size} (Order: ${p.order})"
+                        slotStatusTexts[slot]?.text = stepMsg
+                        // Fallback: mirror the step message in normal area so progress is visible even if overlay is delayed
+                        slotStatusNormalTexts[slot]?.text = stepMsg
+                        slotStatusNormalTexts[slot]?.setTextColor(0xFF1976D2.toInt())
+                        Log.d("InspectionActivity", "Updated status for slot $slot: $stepMsg")
                     }
                     
                     val bodyJson = org.json.JSONObject().apply {
@@ -533,6 +570,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                         slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
                         slotStatusNormalTexts[slot]?.text = "Validado ✓"
                         slotStatusNormalTexts[slot]?.setTextColor(0xFF4CAF50.toInt())
+                        Log.d("InspectionActivity", "No inspection data handled → normal success flow for slot=$slot")
                         
                         android.widget.Toast.makeText(
                             this@InspectionActivity,
