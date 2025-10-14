@@ -267,6 +267,19 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             Log.d("InspectionActivity", "onActivityResult: requestCode=$requestCode, resultCode=$resultCode, data=${data != null}")
             Log.d("InspectionActivity", "requestCodeBySlot map: $requestCodeBySlot")
             
+            // Check if this is a clear slot data action
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                val action = data.getStringExtra("action")
+                if (action == "clear_slot_data") {
+                    val slot = data.getStringExtra("slot")
+                    if (slot != null) {
+                        Log.d("InspectionActivity", "Clearing slot data for: $slot")
+                        clearSlotData(slot)
+                        return
+                    }
+                }
+            }
+            
             // All camera captures now go to detail view
             Log.d("InspectionActivity", "Received camera result, requestCode=$requestCode")
             if (resultCode == Activity.RESULT_OK && data != null) {
@@ -711,6 +724,34 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
         }
         slotStatusTexts[slot]?.text = "DEBUG: Testing overlay"
         slotStatusTexts[slot]?.setTextColor(android.graphics.Color.WHITE)
+    }
+    
+    // Clear all data for a specific slot (called from InspectionDetailActivity)
+    fun clearSlotData(slot: String) {
+        try {
+            Log.d("InspectionActivity", "Clearing slot data for: $slot")
+            
+            // Clear preview URL
+            latestPreviewUrlBySlot.remove(slot)
+            
+            // Clear preview image
+            previews[slot]?.setImageDrawable(null)
+            
+            // Clear progress overlays
+            slotProgressOverlays[slot]?.visibility = android.view.View.GONE
+            slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
+            
+            // Clear status texts
+            slotStatusTexts[slot]?.text = ""
+            slotStatusNormalTexts[slot]?.text = ""
+            
+            // Clear pending preview loads
+            pendingPreviewLoads.removeAll { it.first == slot }
+            
+            Log.d("InspectionActivity", "Slot data cleared for: $slot")
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error clearing slot data for '$slot': ${e.message}")
+        }
     }
 }
 
