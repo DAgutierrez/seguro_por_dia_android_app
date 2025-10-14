@@ -152,6 +152,32 @@ object SupabaseClientProvider {
         return if (publicUrl.startsWith(prefix)) publicUrl.removePrefix(prefix) else publicUrl
     }
 
+    fun executePrecheck(precheckUrl: String, storagePath: String, responseValue: String): org.json.JSONObject? {
+        try {
+            android.util.Log.d("SupabasePrecheck", "Executing precheck: $precheckUrl")
+            android.util.Log.d("SupabasePrecheck", "Storage path: $storagePath")
+            android.util.Log.d("SupabasePrecheck", "Response value: $responseValue")
+            
+            val jsonBody = org.json.JSONObject().apply {
+                put("imageUrl", storagePath)
+                put("responseValue", responseValue)
+            }
+            
+            android.util.Log.d("SupabasePrecheck", "Request body: $jsonBody")
+            
+            val response = postJson(precheckUrl, jsonBody.toString())
+            
+            return if (response.isNotEmpty()) {
+                org.json.JSONObject(response)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SupabasePrecheck", "Error executing precheck: ${e.message}", e)
+            return null
+        }
+    }
+
     fun postJson(url: String, jsonBody: String): String {
         val media = "application/json; charset=utf-8".toMediaType()
         val body = RequestBody.create(media, jsonBody)

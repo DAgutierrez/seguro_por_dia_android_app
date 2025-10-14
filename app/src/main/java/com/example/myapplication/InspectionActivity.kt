@@ -130,26 +130,24 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             slotCameraIcons[slotId] = cameraIcon
             
             slotLayout.setOnClickListener {
-                // Check if there's inspection data for this slot
+                // Always go to detail view - with or without inspection data
                 val inspectionData = getInspectionDataForSlot(slotId)
+                val intent = Intent(this, InspectionDetailActivity::class.java)
+                
                 if (inspectionData != null) {
-                    // Navigate to detail view
-                    val intent = Intent(this, InspectionDetailActivity::class.java)
+                    // Has inspection data - show details
                     intent.putExtra("inspectionData", inspectionData)
-                    startActivityForResult(intent, 2000 + requestCodeBySlot.getValue(slotId))
-                    Log.d("InspectionActivity", "Navigating to detail view for slot: $slotId")
+                    Log.d("InspectionActivity", "Navigating to detail view with data for slot: $slotId")
                 } else {
-                    // Launch camera capture
-                    val intent = Intent(this, LoadingActivity::class.java)
-                    intent.putExtra("captureMode", true)
+                    // No inspection data - show empty state
                     intent.putExtra("slot", slotId)
                     intent.putExtra("inspectionViewId", inspectionView.id)
                     intent.putExtra("inspectionViewDescription", inspectionView.description)
                     intent.putExtra("cameraPosition", inspectionView.camera_position)
-                    val requestCode = requestCodeBySlot.getValue(slotId)
-                    Log.d("InspectionActivity", "Launching capture for slot=$slotId (id=${inspectionView.id}, camera_position=${inspectionView.camera_position}) with requestCode=$requestCode")
-                    startActivityForResult(intent, requestCode)
+                    Log.d("InspectionActivity", "Navigating to detail view with empty state for slot: $slotId")
                 }
+                
+                startActivityForResult(intent, 2000 + requestCodeBySlot.getValue(slotId))
             }
             
             container.addView(slotLayout)
@@ -214,12 +212,24 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             slotCameraIcons[slot] = cameraIcon
             
             slotLayout.setOnClickListener {
-                val intent = Intent(this, LoadingActivity::class.java)
-                intent.putExtra("captureMode", true)
-                intent.putExtra("slot", slot)
-                val requestCode = requestCodeBySlot.getValue(slot)
-                Log.d("InspectionActivity", "Launching capture (fallback) for slot=$slot with requestCode=$requestCode")
-                startActivityForResult(intent, requestCode)
+                // Always go to detail view - with or without inspection data
+                val inspectionData = getInspectionDataForSlot(slot)
+                val intent = Intent(this, InspectionDetailActivity::class.java)
+                
+                if (inspectionData != null) {
+                    // Has inspection data - show details
+                    intent.putExtra("inspectionData", inspectionData)
+                    Log.d("InspectionActivity", "Navigating to detail view with data (fallback) for slot: $slot")
+                } else {
+                    // No inspection data - show empty state
+                    intent.putExtra("slot", slot)
+                    intent.putExtra("inspectionViewId", -1) // Fallback doesn't have inspectionViewId
+                    intent.putExtra("inspectionViewDescription", slot.replace('_', ' ').replaceFirstChar { it.titlecase() })
+                    intent.putExtra("cameraPosition", null as String?)
+                    Log.d("InspectionActivity", "Navigating to detail view with empty state (fallback) for slot: $slot")
+                }
+                
+                startActivityForResult(intent, 2000 + requestCodeBySlot.getValue(slot))
             }
             
             container.addView(slotLayout)
@@ -257,19 +267,8 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             Log.d("InspectionActivity", "onActivityResult: requestCode=$requestCode, resultCode=$resultCode, data=${data != null}")
             Log.d("InspectionActivity", "requestCodeBySlot map: $requestCodeBySlot")
             
-            // Handle result from InspectionDetailActivity (retake photo)
-            if (requestCode >= 2000) {
-                Log.d("InspectionActivity", "Received result from InspectionDetailActivity, requestCode=$requestCode")
-                if (resultCode == Activity.RESULT_OK && data != null) {
-                    Log.d("InspectionActivity", "InspectionDetailActivity returned with data, processing...")
-                    // Continue with normal processing below
-                } else {
-                    Log.d("InspectionActivity", "InspectionDetailActivity returned without data or cancelled")
-                    return
-                }
-            } else {
-                Log.d("InspectionActivity", "Received result from direct camera capture, requestCode=$requestCode")
-            }
+            // All camera captures now go to detail view
+            Log.d("InspectionActivity", "Received camera result, requestCode=$requestCode")
             if (resultCode == Activity.RESULT_OK && data != null) {
                 val baseUrl = data.getStringExtra("uploadedUrl") ?: run {
                     Log.w("InspectionActivity", "Missing uploadedUrl in result")
@@ -281,9 +280,8 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 }
                 val storagePath = data.getStringExtra("storagePath") ?: ""
                 val inspectionViewId = data.getIntExtra("inspectionViewId", -1)
-                val hasInspectionData = data.getBooleanExtra("hasInspectionData", false)
-                val estadoInspeccion = data.getStringExtra("estadoInspeccion")
-                val comentariosInspeccion = data.getStringExtra("comentariosInspeccion")
+                
+                Log.d("InspectionActivity", "Received result - slot='$slot', baseUrl='$baseUrl', storagePath='$storagePath', inspectionViewId=$inspectionViewId")
                 
                 // Validate URL format
                 if (baseUrl.isBlank() || !baseUrl.startsWith("http")) {
@@ -304,28 +302,19 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                     loadImageWithRetry(target, baseUrl)
                 }
                 
-                Log.d("InspectionActivity", "Continuing with precheck decision for slot='$slot'")
-                Log.d("InspectionActivity", "Debug values: inspectionViewId=$inspectionViewId, storagePath='$storagePath', hasInspectionData=$hasInspectionData")
+                Log.d("InspectionActivity", "Processing photo capture for slot='$slot'")
+                Log.d("InspectionActivity", "Debug values: inspectionViewId=$inspectionViewId, storagePath='$storagePath'")
                 
-                // Handle inspection data if present
-                if (hasInspectionData && estadoInspeccion != null && comentariosInspeccion != null) {
-                    val inspectionData = InspectionData(
-                        imageUrl = baseUrl,
-                        estadoInspeccion = estadoInspeccion,
-                        comentariosInspeccion = comentariosInspeccion,
-                        inspectionViewId = inspectionViewId,
-                        timestamp = System.currentTimeMillis(),
-                        slot = slot
-                    )
-                    saveInspectionData(inspectionData)
-                    updateSlotStatusWithInspection(slot, estadoInspeccion)
-                    Log.d("InspectionActivity", "Inspection data saved for slot: $slot, estado: $estadoInspeccion")
-                } else if (inspectionViewId > 0 && storagePath.isNotEmpty()) {
-                    // Start precheck in background
-                    Log.d("InspectionActivity", "Starting precheck in background for slot: $slot")
-                    startPrecheckInBackground(slot, storagePath, baseUrl, inspectionViewId)
+                // Check if we need to start prechecks (from detail view)
+                val startPrechecks = data.getBooleanExtra("startPrechecks", false)
+                if (startPrechecks && inspectionViewId > 0 && storagePath.isNotEmpty()) {
+                    Log.d("InspectionActivity", "Starting precheck in background for slot: $slot (from detail view)")
+                   // startPrecheckInBackground(slot, storagePath, baseUrl, inspectionViewId)
+                } else if (!startPrechecks) {
+                    Log.d("InspectionActivity", "No prechecks needed for slot: $slot (detail view will handle)")
                 } else {
-                    Log.w("InspectionActivity", "Precheck not started: inspectionViewId=$inspectionViewId, storagePath='$storagePath', hasInspectionData=$hasInspectionData")
+                    Log.e("InspectionActivity", "Cannot start prechecks: inspectionViewId=$inspectionViewId, storagePath='$storagePath'")
+                    Log.e("InspectionActivity", "This indicates a serious error in the camera flow")
                 }
             } else if (resultCode != Activity.RESULT_CANCELED) {
                 Log.w("InspectionActivity", "Unexpected result code: $resultCode")
@@ -388,7 +377,8 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     }
     
     private fun startPrecheckInBackground(slot: String, storagePath: String, uploadedPublicUrl: String, inspectionViewId: Int) {
-        Log.d("InspectionActivity", "Starting precheck in background for slot=$slot")
+        Log.d("InspectionActivity", "Starting precheck in background for slot='$slot'")
+        Log.d("InspectionActivity", "Parameters: storagePath='$storagePath', uploadedPublicUrl='$uploadedPublicUrl', inspectionViewId=$inspectionViewId")
         Log.d("InspectionActivity", "UI refs available? overlay=${slotProgressOverlays.containsKey(slot)} statusText=${slotStatusTexts.containsKey(slot)} normalText=${slotStatusNormalTexts.containsKey(slot)} cameraIcon=${slotCameraIcons.containsKey(slot)}")
         
         // Show progress overlay and hide camera icon
@@ -450,11 +440,17 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                     
                     withContext(Dispatchers.Main) {
                         val stepMsg = "Validando paso ${i + 1} de ${sortedPrechecks.size} (Order: ${p.order})"
+                        val detailMsg = "Validando ${p.name}"
+                        
                         slotStatusTexts[slot]?.text = stepMsg
                         // Fallback: mirror the step message in normal area so progress is visible even if overlay is delayed
                         slotStatusNormalTexts[slot]?.text = stepMsg
                         slotStatusNormalTexts[slot]?.setTextColor(0xFF1976D2.toInt())
-                        Log.d("InspectionActivity", "Updated status for slot $slot: $stepMsg")
+                        
+                        // Update detail view progress via SharedPreferences
+                        updateDetailViewProgress(slot, detailMsg)
+                        
+                        Log.d("InspectionActivity", "Updated status for slot $slot: $stepMsg, detail: $detailMsg")
                     }
                     
                     val bodyJson = org.json.JSONObject().apply {
@@ -491,34 +487,18 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                             slotProgressOverlays[slot]?.visibility = android.view.View.GONE
                             slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
                             
-                            // Show error dialog with the error message from the precheck
-                            android.app.AlertDialog.Builder(this@InspectionActivity)
-                                .setTitle("Validación Fallida")
-                                .setMessage("${p.errorMessage}\n\nLa imagen será eliminada.")
-                                .setPositiveButton("Entendido") { dialog, _ ->
-                                    dialog.dismiss()
-                                }
-                                .setCancelable(false)
-                                .show()
+                            // Save failed precheck result as inspection data (don't delete image)
+                            val failedInspectionData = InspectionData(
+                                imageUrl = uploadedPublicUrl,
+                                estadoInspeccion = "Rechazada",
+                                comentariosInspeccion = p.errorMessage,
+                                inspectionViewId = inspectionViewId,
+                                timestamp = System.currentTimeMillis(),
+                                slot = slot
+                            )
+                            saveInspectionData(failedInspectionData)
                             
-                            // Delete image and reset preview
-                            launch(Dispatchers.IO) {
-                                try {
-                                    SupabaseClientProvider.deleteImage(storagePath)
-                                    withContext(Dispatchers.Main) {
-                                        // Reset image to placeholder
-                                        previews[slot]?.setImageResource(R.drawable.ic_camera_placeholder)
-                                        // Reset status text to normal state
-                                        slotStatusNormalTexts[slot]?.text = "Toca para capturar"
-                                        slotStatusNormalTexts[slot]?.setTextColor(0xFF757575.toInt())
-                                        // Remove from latest preview URLs so it can be captured again
-                                        latestPreviewUrlBySlot.remove(slot)
-                                        Log.d("InspectionActivity", "Image deleted and preview reset for slot: $slot")
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e("InspectionActivity", "Error deleting image: ${e.message}")
-                                }
-                            }
+                            Log.d("InspectionActivity", "Precheck failed for slot: $slot, saving as rejected inspection data")
                         }
                         return@launch
                     }
@@ -597,7 +577,34 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             }
         }
     }
-
+    
+    private fun updateDetailViewProgress(slot: String, progressMessage: String) {
+        try {
+            val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
+            val editor = sharedPref.edit()
+            val key = "${slot}_progress"
+            
+            Log.d("InspectionActivity", "Saving progress - slot: '$slot', key: '$key', message: '$progressMessage'")
+            
+            editor.putString(key, progressMessage)
+            editor.putLong("${key}_timestamp", System.currentTimeMillis())
+            val success = editor.commit() // Use commit() instead of apply() for immediate writing
+            
+            Log.d("InspectionActivity", "Updated detail view progress for slot $slot: $progressMessage, success: $success")
+            
+            // Verify it was saved
+            val saved = sharedPref.getString(key, "")
+            Log.d("InspectionActivity", "Verified saved progress for key '$key': '$saved'")
+            
+            // Also log all keys to debug
+            val allKeys = sharedPref.all.keys
+            val progressKeys = allKeys.filter { it.contains("_progress") }
+            Log.d("InspectionActivity", "All progress keys in SharedPreferences: $progressKeys")
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error updating detail view progress: ${e.message}")
+        }
+    }
+    
     private fun saveInspectionData(inspectionData: InspectionData) {
         try {
             val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
