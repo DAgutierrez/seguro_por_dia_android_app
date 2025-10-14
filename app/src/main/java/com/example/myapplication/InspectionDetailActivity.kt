@@ -107,23 +107,44 @@ class InspectionDetailActivity : AppCompatActivity() {
     private fun setupRetakeButton() {
         retakePhotoButton.setOnClickListener {
             inspectionData?.let { data ->
-                // Delete existing inspection data for this slot
-                deleteInspectionDataForSlot(data.slot)
-                
-                // Launch camera to retake photo
-                val intent = Intent(this, LoadingActivity::class.java)
-                intent.putExtra("captureMode", true)
-                intent.putExtra("slot", data.slot)
-                intent.putExtra("inspectionViewId", data.inspectionViewId)
-                intent.putExtra("inspectionViewDescription", "Re-captura de inspección")
-                intent.putExtra("cameraPosition", null as String?) // Will be fetched from InspectionView
-                
-                Log.d("InspectionDetailActivity", "Launching retake capture for slot=${data.slot}")
-                startActivity(intent)
-                
-                // Finish this activity to return to InspectionActivity
-                finish()
+                try {
+                    // Delete existing inspection data for this slot
+                    deleteInspectionDataForSlot(data.slot)
+                    
+                    // Launch camera to retake photo
+                    val intent = Intent(this, LoadingActivity::class.java)
+                    intent.putExtra("captureMode", true)
+                    intent.putExtra("slot", data.slot)
+                    intent.putExtra("inspectionViewId", data.inspectionViewId)
+                    intent.putExtra("inspectionViewDescription", "Re-captura de inspección")
+                    intent.putExtra("cameraPosition", null as String?) // Will be fetched from InspectionView
+                    
+                    Log.d("InspectionDetailActivity", "Launching retake capture for slot=${data.slot}")
+                    startActivityForResult(intent, 1001)
+                } catch (e: Exception) {
+                    Log.e("InspectionDetailActivity", "Error in setupRetakeButton: ${e.message}")
+                }
             }
+        }
+    }
+    
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        
+        if (requestCode == 1001) {
+            Log.d("InspectionDetailActivity", "Received result from camera: resultCode=$resultCode")
+            Log.d("InspectionDetailActivity", "Data extras: ${data?.extras}")
+            
+            // Pass the result back to InspectionActivity and finish this activity
+            if (resultCode == android.app.Activity.RESULT_OK) {
+                Log.d("InspectionDetailActivity", "Setting result OK and passing data back to InspectionActivity")
+                setResult(android.app.Activity.RESULT_OK, data)
+            } else {
+                Log.d("InspectionDetailActivity", "Setting result code $resultCode and passing data back to InspectionActivity")
+                setResult(resultCode, data)
+            }
+            Log.d("InspectionDetailActivity", "Finishing InspectionDetailActivity")
+            finish()
         }
     }
     

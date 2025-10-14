@@ -170,8 +170,10 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                                 val storagePath = SupabaseClientProvider.storagePathFromPublicUrl(uploadedPublicUrl)
 
                                 Log.d(TAG, "Image uploaded successfully: $uploadedPublicUrl")
+                                Log.d(TAG, "Returning to InspectionActivity with: slot=$captureSlot, storagePath=$storagePath, inspectionViewId=$inspectionViewId")
                                 
                                 // Return immediately to InspectionActivity with the uploaded URL and inspectionViewId
+                                // InspectionActivity will handle the prechecks in background
                                 runOnUiThread {
                                     val result = android.content.Intent().apply {
                                         putExtra("uploadedUrl", uploadedPublicUrl)
@@ -181,6 +183,7 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
                                     }
                                     setResult(android.app.Activity.RESULT_OK, result)
                                     android.widget.Toast.makeText(this@CameraViewActivity, "Foto subida", android.widget.Toast.LENGTH_SHORT).show()
+                                    Log.d(TAG, "Setting result and finishing CameraViewActivity")
                                     finish()
                                 }
                             } catch (t: Throwable) {
@@ -318,12 +321,18 @@ class CameraViewActivity : AppCompatActivity(), Detector.DetectorListener, Camer
 
     private fun finishWithSuccess(uploadedPublicUrl: String) {
         try {
+            val storagePath = SupabaseClientProvider.storagePathFromPublicUrl(uploadedPublicUrl)
+            Log.d(TAG, "finishWithSuccess: uploadedUrl=$uploadedPublicUrl, slot=$captureSlot, storagePath=$storagePath, inspectionViewId=$inspectionViewId")
+            
             val result = android.content.Intent().apply {
                 putExtra("uploadedUrl", uploadedPublicUrl)
                 putExtra("slot", captureSlot)
+                putExtra("storagePath", storagePath)
+                putExtra("inspectionViewId", inspectionViewId)
             }
             setResult(android.app.Activity.RESULT_OK, result)
             android.widget.Toast.makeText(this, "Foto validada y subida", android.widget.Toast.LENGTH_SHORT).show()
+            Log.d(TAG, "finishWithSuccess: Result set, finishing activity")
             finish()
         } catch (e: Exception) {
             Log.e(TAG, "Error in finishWithSuccess: ${e.message}")

@@ -136,7 +136,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                     // Navigate to detail view
                     val intent = Intent(this, InspectionDetailActivity::class.java)
                     intent.putExtra("inspectionData", inspectionData)
-                    startActivity(intent)
+                    startActivityForResult(intent, 2000 + requestCodeBySlot.getValue(slotId))
                     Log.d("InspectionActivity", "Navigating to detail view for slot: $slotId")
                 } else {
                     // Launch camera capture
@@ -252,6 +252,17 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
         Log.d("InspectionActivity", "onActivityResult: requestCode=$requestCode resultCode=$resultCode dataExtras=${data?.extras}")
         
         try {
+            // Handle result from InspectionDetailActivity (retake photo)
+            if (requestCode >= 2000) {
+                Log.d("InspectionActivity", "Received result from InspectionDetailActivity, requestCode=$requestCode")
+                if (resultCode == Activity.RESULT_OK && data != null) {
+                    Log.d("InspectionActivity", "InspectionDetailActivity returned with data, processing...")
+                    // Continue with normal processing below
+                } else {
+                    Log.d("InspectionActivity", "InspectionDetailActivity returned without data or cancelled")
+                    return
+                }
+            }
             if (resultCode == Activity.RESULT_OK && data != null) {
                 val baseUrl = data.getStringExtra("uploadedUrl") ?: run {
                     Log.w("InspectionActivity", "Missing uploadedUrl in result")
@@ -284,6 +295,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 }
                 
                 Log.d("InspectionActivity", "Loading preview and starting precheck for slot='$slot'")
+                Log.d("InspectionActivity", "Debug values: inspectionViewId=$inspectionViewId, storagePath='$storagePath', hasInspectionData=$hasInspectionData")
                 
                 // Load image immediately
                 loadImageWithRetry(target, baseUrl)
@@ -303,7 +315,10 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                     Log.d("InspectionActivity", "Inspection data saved for slot: $slot, estado: $estadoInspeccion")
                 } else if (inspectionViewId > 0 && storagePath.isNotEmpty()) {
                     // Start precheck in background
+                    Log.d("InspectionActivity", "Starting precheck in background for slot: $slot")
                     startPrecheckInBackground(slot, storagePath, baseUrl, inspectionViewId)
+                } else {
+                    Log.w("InspectionActivity", "Precheck not started: inspectionViewId=$inspectionViewId, storagePath='$storagePath', hasInspectionData=$hasInspectionData")
                 }
             } else if (resultCode != Activity.RESULT_CANCELED) {
                 Log.w("InspectionActivity", "Unexpected result code: $resultCode")

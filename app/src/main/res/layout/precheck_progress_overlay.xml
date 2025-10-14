@@ -23,14 +23,12 @@
             android:gravity="center">
 
             <!-- Progress Indicator -->
-            <com.google.android.material.progressindicator.CircularProgressIndicator
+            <ProgressBar
                 android:layout_width="64dp"
                 android:layout_height="64dp"
                 android:layout_marginBottom="24dp"
                 android:indeterminate="true"
-                app:indicatorColor="#1A237E"
-                app:trackColor="#E3F2FD"
-                app:trackThickness="4dp" />
+                android:indeterminateTint="#1A237E" />
 
             <!-- Status Text -->
             <TextView
