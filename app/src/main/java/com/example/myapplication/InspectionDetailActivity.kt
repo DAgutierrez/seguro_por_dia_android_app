@@ -526,6 +526,9 @@ class InspectionDetailActivity : AppCompatActivity() {
                             )
                             saveInspectionDataToSharedPrefs(failedInspectionData)
                             
+                            // Notify InspectionActivity to update slot status
+                            notifyInspectionActivitySlotUpdate(slot, "Rechazada")
+                            
                             estadoTextView.text = "Estado: Rechazada"
                             estadoTextView.setTextColor(0xFFF44336.toInt())
                             comentariosTextView.text = p.errorMessage
@@ -556,6 +559,9 @@ class InspectionDetailActivity : AppCompatActivity() {
                                     slot = slot
                                 )
                                 saveInspectionDataToSharedPrefs(inspectionDataObj)
+                                
+                                // Notify InspectionActivity to update slot status
+                                notifyInspectionActivitySlotUpdate(slot, estadoInspeccion)
                                 
                                 // Update UI with inspection status
                                 supportActionBar?.title = "Detalle de Inspección"
@@ -602,6 +608,9 @@ class InspectionDetailActivity : AppCompatActivity() {
                         clearProgressFromSharedPrefs(slot)
                         clearProcessingStateFromSharedPrefs(slot)
                         
+                        // Notify InspectionActivity to update slot status
+                        //notifyInspectionActivitySlotUpdate(slot, "Aprobada")
+                        
                         Log.d("InspectionDetailActivity", "No inspection data handled → normal success flow for slot=$slot")
                     }
                 }
@@ -619,6 +628,9 @@ class InspectionDetailActivity : AppCompatActivity() {
                     // Clear progress since there was an error
                     clearProgressFromSharedPrefs(slot)
                     clearProcessingStateFromSharedPrefs(slot)
+                    
+                    // Notify InspectionActivity to update slot status
+                   // notifyInspectionActivitySlotUpdate(slot, "Error")
                 }
             }
         }
@@ -628,15 +640,12 @@ class InspectionDetailActivity : AppCompatActivity() {
         try {
             val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
             val editor = sharedPref.edit()
-            val timestamp = System.currentTimeMillis()
-            val baseKey = "${inspectionData.slot}_$timestamp"
+            val baseKey = inspectionData.slot
             
-            editor.putString("${baseKey}_slot", inspectionData.slot)
             editor.putString("${baseKey}_imageUrl", inspectionData.imageUrl)
             editor.putString("${baseKey}_estadoInspeccion", inspectionData.estadoInspeccion)
             editor.putString("${baseKey}_comentariosInspeccion", inspectionData.comentariosInspeccion)
             editor.putInt("${baseKey}_inspectionViewId", inspectionData.inspectionViewId)
-            editor.putLong("${baseKey}_timestamp", timestamp)
             
             editor.apply()
             Log.d("InspectionDetailActivity", "Saved inspection data for slot: ${inspectionData.slot}")
@@ -800,7 +809,6 @@ class InspectionDetailActivity : AppCompatActivity() {
             Log.d("InspectionDetailActivity", "Saving progress - slot: '$slot', key: '$key', message: '$progressMessage'")
             
             editor.putString(key, progressMessage)
-            editor.putLong("${key}_timestamp", System.currentTimeMillis())
             val success = editor.commit() // Use commit() for immediate writing
             
             Log.d("InspectionDetailActivity", "Progress saved for slot $slot: $progressMessage, success: $success")
@@ -855,8 +863,8 @@ class InspectionDetailActivity : AppCompatActivity() {
             Log.d("InspectionDetailActivity", "Clearing processing state for slot '$slot', key: '$key'")
             
             editor.remove(key)
+            editor.remove("${key}_uploadedUrl")
             editor.remove("${key}_inspectionViewId")
-            editor.remove("${key}_timestamp")
             editor.apply()
             
             Log.d("InspectionDetailActivity", "Processing state cleared for slot: $slot")
@@ -904,6 +912,22 @@ class InspectionDetailActivity : AppCompatActivity() {
         }
     }
     
+    private fun notifyInspectionActivitySlotUpdate(slot: String, estadoInspeccion: String) {
+        try {
+            Log.d("InspectionDetailActivity", "Notifying InspectionActivity of slot update: $slot -> $estadoInspeccion")
+            
+            val resultIntent = Intent().apply {
+                putExtra("action", "update_slot_status")
+                putExtra("slot", slot)
+                putExtra("estadoInspeccion", estadoInspeccion)
+            }
+            setResult(android.app.Activity.RESULT_OK, resultIntent)
+            
+        } catch (e: Exception) {
+            Log.e("InspectionDetailActivity", "Error notifying InspectionActivity: ${e.message}")
+        }
+    }
+    
     private fun saveProcessingStateToSharedPrefs(slot: String, uploadedUrl: String, inspectionViewId: Int) {
         try {
             val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
@@ -912,9 +936,11 @@ class InspectionDetailActivity : AppCompatActivity() {
             
             Log.d("InspectionDetailActivity", "Saving processing state for slot '$slot', key: '$key'")
             
-            editor.putString(key, uploadedUrl)
+            // Save as boolean for processing state
+            editor.putBoolean(key, true)
+            // Save additional data in separate keys
+            editor.putString("${key}_uploadedUrl", uploadedUrl)
             editor.putInt("${key}_inspectionViewId", inspectionViewId)
-            editor.putLong("${key}_timestamp", System.currentTimeMillis())
             editor.apply()
             
             Log.d("InspectionDetailActivity", "Processing state saved for slot: $slot")
@@ -929,26 +955,17 @@ class InspectionDetailActivity : AppCompatActivity() {
             
             // Check if there's a processing state saved
             val processingKey = "${slot}_processing"
-            val processingUrl = sharedPref.getString(processingKey, "")
-            val processingTimestamp = sharedPref.getLong("${processingKey}_timestamp", 0L)
+            val isProcessing = sharedPref.getBoolean(processingKey, false)
             
             // Check if there's saved progress
             val progressKey = "${slot}_progress"
             val progressMessage = sharedPref.getString(progressKey, "")
-            val progressTimestamp = sharedPref.getLong("${progressKey}_timestamp", 0L)
             
-            val currentTime = System.currentTimeMillis()
-            val processingTimeDiff = currentTime - processingTimestamp
-            val progressTimeDiff = currentTime - progressTimestamp
-            
-            val hasProcessing = processingUrl != null && processingUrl.isNotEmpty()
             val hasProgress = progressMessage != null && progressMessage.isNotEmpty()
-            val isRecent = processingTimeDiff < 5 * 60 * 1000 || progressTimeDiff < 5 * 60 * 1000 // 5 minutes
             
-            Log.d("InspectionDetailActivity", "Checking processing status for slot '$slot': hasProcessing=$hasProcessing, hasProgress=$hasProgress, isRecent=$isRecent")
-            Log.d("InspectionDetailActivity", "Processing timeDiff=${processingTimeDiff}ms, Progress timeDiff=${progressTimeDiff}ms")
+            Log.d("InspectionDetailActivity", "Checking processing status for slot '$slot': isProcessing=$isProcessing, hasProgress=$hasProgress")
             
-            return (hasProcessing || hasProgress) && isRecent
+            return isProcessing || hasProgress
         } catch (e: Exception) {
             Log.e("InspectionDetailActivity", "Error checking processing status: ${e.message}")
             return false
@@ -963,7 +980,7 @@ class InspectionDetailActivity : AppCompatActivity() {
             
             // First try to get from processing state
             val processingKey = "${slot}_processing"
-            val uploadedUrl = sharedPref.getString(processingKey, "")
+            val uploadedUrl = sharedPref.getString("${processingKey}_uploadedUrl", "")
             val inspectionViewId = sharedPref.getInt("${processingKey}_inspectionViewId", 0)
             
             if (uploadedUrl != null && uploadedUrl.isNotEmpty()) {
@@ -1002,61 +1019,7 @@ class InspectionDetailActivity : AppCompatActivity() {
                 return
             }
             
-            // If no processing state, try to get from inspection data
-            val allKeys = sharedPref.all.keys
-            val slotKeys = allKeys.filter { it.startsWith("${slot}_") && it.endsWith("_slot") }
-            
-            if (slotKeys.isNotEmpty()) {
-                // Get the most recent one
-                val latestKey = slotKeys.maxByOrNull { key ->
-                    val timestampKey = key.replace("_slot", "_timestamp")
-                    sharedPref.getLong(timestampKey, 0L)
-                }
-                
-                if (latestKey != null) {
-                    val baseKey = latestKey.replace("_slot", "")
-                    val fallbackUrl = sharedPref.getString("${baseKey}_imageUrl", "")
-                    
-                    if (fallbackUrl != null && fallbackUrl.isNotEmpty()) {
-                        // Load the image
-                        Glide.with(this)
-                            .load(fallbackUrl)
-                            .diskCacheStrategy(DiskCacheStrategy.NONE)
-                            .skipMemoryCache(true)
-                            .error(R.drawable.ic_camera_placeholder)
-                            .placeholder(R.drawable.ic_camera_placeholder)
-                            .into(imageView)
-                        
-                        // Set processing state
-                        supportActionBar?.title = "Procesando Inspección"
-                        estadoTextView.text = "Procesando..."
-                        estadoTextView.setTextColor(0xFF1976D2.toInt())
-                        
-                        // Load saved progress
-                        val savedProgress = loadProgressFromSharedPrefs(slot)
-                        if (savedProgress != null && savedProgress.isNotEmpty()) {
-                            comentariosTextView.text = savedProgress
-                            Log.d("InspectionDetailActivity", "Restored saved progress from fallback: $savedProgress")
-                        } else {
-                            comentariosTextView.text = "Ejecutando validaciones en background..."
-                        }
-                        comentariosTextView.setTextColor(0xFF1976D2.toInt())
-                        
-                        // Hide retake button during processing
-                        retakePhotoButton.visibility = android.view.View.GONE
-                        
-                        // Start polling for progress updates since we're in processing state
-                        startPollingForProgress(slot)
-                        
-                        Log.d("InspectionDetailActivity", "Processing state restored from fallback for slot: $slot")
-                        return
-                    }
-                }
-            }
-            
-            // If we couldn't restore, fall back to empty state
-            Log.w("InspectionDetailActivity", "Could not restore processing state, falling back to empty state")
-            loadEmptyState()
+            Log.d("InspectionDetailActivity", "No processing state found for slot: $slot")
             
         } catch (e: Exception) {
             Log.e("InspectionDetailActivity", "Error restoring processing state: ${e.message}")

@@ -43,6 +43,10 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     private val slotStatusTexts = hashMapOf<String, TextView>()
     private val slotStatusNormalTexts = hashMapOf<String, TextView>()
     private val slotCameraIcons = hashMapOf<String, android.view.View>()
+    
+    // Polling for progress updates
+    private var progressPollingHandler: android.os.Handler? = null
+    private var progressPollingRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,6 +75,9 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
 
         loadInspectionViews()
         loadExistingInspectionData()
+        
+        // Check for any processing in progress when returning from detail view
+        checkForProcessingInProgress()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -79,6 +86,55 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             outState.putStringArrayList("preview_keys", ArrayList(latestPreviewUrlBySlot.keys))
             outState.putStringArrayList("preview_urls", ArrayList(latestPreviewUrlBySlot.values))
             Log.d("InspectionActivity", "Saved ${latestPreviewUrlBySlot.size} preview URLs to state")
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.d("InspectionActivity", "=== ONRESUME CALLED ===")
+        // Start continuous polling (minimal logic: only <slot>_processing)
+        startPollingForProgressUpdates()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.d("InspectionActivity", "=== ONPAUSE CALLED ===")
+        // Stop continuous polling when leaving this activity
+        stopPollingForProgressUpdates()
+    }
+
+    private fun updateProcessingFlagsForAllSlots() {
+        try {
+            val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
+            inspectionViews.forEach { inspectionView ->
+                val slot = "inspection_view_${inspectionView.id}"
+                val isProcessing = try {
+                    sharedPref.getBoolean("${slot}_processing", false)
+                } catch (e: ClassCastException) {
+                    Log.w("InspectionActivity", "Key '${slot}_processing' is not a boolean, removing...")
+                    val editor = sharedPref.edit()
+                    editor.remove("${slot}_processing")
+                    editor.apply()
+                    false
+                }
+                val statusText = slotStatusTexts[slot]
+                val progressOverlay = slotProgressOverlays[slot]
+                val cameraIcon = slotCameraIcons[slot]
+                if (isProcessing) {
+                    statusText?.let { t ->
+                        t.text = "Procesando..."
+                        t.visibility = android.view.View.VISIBLE
+                    }
+                    progressOverlay?.visibility = android.view.View.VISIBLE
+                    cameraIcon?.visibility = android.view.View.GONE
+                } else {
+                    // Hide processing UI when not processing
+                    progressOverlay?.visibility = android.view.View.GONE
+                }
+            }
+            Log.d("InspectionActivity", "Processing flags synced for all slots")
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error syncing processing flags: ${e.message}", e)
         }
     }
 
@@ -267,7 +323,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             Log.d("InspectionActivity", "onActivityResult: requestCode=$requestCode, resultCode=$resultCode, data=${data != null}")
             Log.d("InspectionActivity", "requestCodeBySlot map: $requestCodeBySlot")
             
-            // Check if this is a clear slot data action
+            // Check if this is a clear slot data action or update slot status
             if (resultCode == Activity.RESULT_OK && data != null) {
                 val action = data.getStringExtra("action")
                 if (action == "clear_slot_data") {
@@ -275,6 +331,14 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                     if (slot != null) {
                         Log.d("InspectionActivity", "Clearing slot data for: $slot")
                         clearSlotData(slot)
+                        return
+                    }
+                } else if (action == "update_slot_status") {
+                    val slot = data.getStringExtra("slot")
+                    val estadoInspeccion = data.getStringExtra("estadoInspeccion")
+                    if (slot != null && estadoInspeccion != null) {
+                        Log.d("InspectionActivity", "Updating slot status for: $slot -> $estadoInspeccion")
+                        updateSlotStatusWithInspection(slot, estadoInspeccion)
                         return
                     }
                 }
@@ -600,7 +664,6 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             Log.d("InspectionActivity", "Saving progress - slot: '$slot', key: '$key', message: '$progressMessage'")
             
             editor.putString(key, progressMessage)
-            editor.putLong("${key}_timestamp", System.currentTimeMillis())
             val success = editor.commit() // Use commit() instead of apply() for immediate writing
             
             Log.d("InspectionActivity", "Updated detail view progress for slot $slot: $progressMessage, success: $success")
@@ -622,15 +685,14 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
         try {
             val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
             val editor = sharedPref.edit()
-            val key = "${inspectionData.slot}_${inspectionData.timestamp}"
+            val key = inspectionData.slot
+            
             editor.putString("${key}_imageUrl", inspectionData.imageUrl)
             editor.putString("${key}_estadoInspeccion", inspectionData.estadoInspeccion)
             editor.putString("${key}_comentariosInspeccion", inspectionData.comentariosInspeccion)
-            editor.putString("${key}_inspectionViewId", inspectionData.inspectionViewId.toString())
-            editor.putLong("${key}_timestamp", inspectionData.timestamp)
-            editor.putString("${key}_slot", inspectionData.slot)
+            editor.putInt("${key}_inspectionViewId", inspectionData.inspectionViewId)
             editor.apply()
-            Log.d("InspectionActivity", "Inspection data saved locally with key: $key")
+            Log.d("InspectionActivity", "Inspection data saved locally for slot: ${inspectionData.slot}")
         } catch (e: Exception) {
             Log.e("InspectionActivity", "Error saving inspection data: ${e.message}")
         }
@@ -667,15 +729,80 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     }
 
     private fun updateSlotStatusWithInspection(slot: String, estadoInspeccion: String) {
-        slotStatusNormalTexts[slot]?.let { statusText ->
+        Log.d("InspectionActivity", "=== UPDATING SLOT STATUS WITH INSPECTION ===")
+        Log.d("InspectionActivity", "Slot: '$slot', Estado: '$estadoInspeccion'")
+        
+        val statusText = slotStatusNormalTexts[slot]
+        Log.d("InspectionActivity", "StatusText for '$slot': ${statusText != null}")
+        
+        statusText?.let { textView ->
             val statusColor = when (estadoInspeccion.lowercase()) {
                 "aprobada" -> 0xFF4CAF50.toInt() // Green
                 "rechazada" -> 0xFFF44336.toInt() // Red
                 else -> 0xFFFF9800.toInt() // Orange
             }
-            statusText.text = "Estado: $estadoInspeccion"
-            statusText.setTextColor(statusColor)
-            slotProgressOverlays[slot]?.visibility = android.view.View.GONE
+
+            // Update status text with emoji and color
+            val statusEmoji = when (estadoInspeccion.lowercase()) {
+                "aprobada" -> "✅"
+                "rechazada" -> "❌"
+                else -> "⚠️"
+            }
+            
+            val finalText = "$statusEmoji $estadoInspeccion"
+            Log.d("InspectionActivity", "Setting status text to: '$finalText' with color: $statusColor")
+            
+            textView.text = finalText
+            textView.setTextColor(statusColor)
+
+            // Hide progress overlay and show camera icon
+            val progressOverlay = slotProgressOverlays[slot]
+            val cameraIcon = slotCameraIcons[slot]
+            
+            Log.d("InspectionActivity", "Progress overlay for '$slot': ${progressOverlay != null}")
+            Log.d("InspectionActivity", "Camera icon for '$slot': ${cameraIcon != null}")
+            
+            progressOverlay?.visibility = android.view.View.GONE
+            cameraIcon?.visibility = android.view.View.VISIBLE
+
+            // Update card background color based on status
+            updateSlotCardBackground(slot, estadoInspeccion)
+
+            Log.d("InspectionActivity", "Updated slot status for '$slot': $estadoInspeccion")
+        } ?: Log.w("InspectionActivity", "StatusText not found for slot '$slot'")
+        
+        Log.d("InspectionActivity", "=== FINISHED UPDATING SLOT STATUS ===")
+    }
+    
+    private fun updateSlotCardBackground(slot: String, estadoInspeccion: String) {
+        try {
+            // Find the slot layout by ID
+            val slotLayoutId = resources.getIdentifier(slot, "id", packageName)
+            val slotLayout = findViewById<android.view.View>(slotLayoutId)
+            
+            if (slotLayout != null && slotLayout is com.google.android.material.card.MaterialCardView) {
+                val backgroundColor = when (estadoInspeccion.lowercase()) {
+                    "aprobada" -> 0xFFE8F5E8.toInt() // Light green
+                    "rechazada" -> 0xFFFFEBEE.toInt() // Light red
+                    else -> 0xFFFFF3E0.toInt() // Light orange
+                }
+                
+                slotLayout.setCardBackgroundColor(backgroundColor)
+                
+                // Add a subtle border
+                val borderColor = when (estadoInspeccion.lowercase()) {
+                    "aprobada" -> 0xFF4CAF50.toInt() // Green
+                    "rechazada" -> 0xFFF44336.toInt() // Red
+                    else -> 0xFFFF9800.toInt() // Orange
+                }
+                
+                slotLayout.strokeColor = borderColor
+                slotLayout.strokeWidth = 2
+                
+                Log.d("InspectionActivity", "Updated card background for slot '$slot' with color: $backgroundColor")
+            }
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error updating card background for slot '$slot': ${e.message}")
         }
     }
 
@@ -730,27 +857,367 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     fun clearSlotData(slot: String) {
         try {
             Log.d("InspectionActivity", "Clearing slot data for: $slot")
-            
+
             // Clear preview URL
             latestPreviewUrlBySlot.remove(slot)
-            
+
             // Clear preview image
             previews[slot]?.setImageDrawable(null)
-            
+
             // Clear progress overlays
             slotProgressOverlays[slot]?.visibility = android.view.View.GONE
             slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
-            
+
             // Clear status texts
             slotStatusTexts[slot]?.text = ""
             slotStatusNormalTexts[slot]?.text = ""
-            
+
             // Clear pending preview loads
             pendingPreviewLoads.removeAll { it.first == slot }
-            
+
             Log.d("InspectionActivity", "Slot data cleared for: $slot")
         } catch (e: Exception) {
             Log.e("InspectionActivity", "Error clearing slot data for '$slot': ${e.message}")
+        }
+    }
+
+    private fun checkForProcessingInProgress() {
+        try {
+            Log.d("InspectionActivity", "=== CHECKING FOR PROCESSING IN PROGRESS ===")
+            
+            val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
+            val allKeys = sharedPref.all.keys
+            
+            Log.d("InspectionActivity", "All SharedPreferences keys in checkForProcessingInProgress: $allKeys")
+            
+            // Clean up old format data first
+            cleanOldFormatProcessingData(sharedPref, allKeys)
+            
+            // Look for processing state keys (exactly "_processing", not containing other suffixes)
+            val processingSlots = allKeys.filter { 
+                it.endsWith("_processing") && !it.contains("_processing_")
+            }
+            
+            Log.d("InspectionActivity", "Found ${processingSlots.size} slots with processing in progress: $processingSlots")
+            
+            processingSlots.forEach { processingKey ->
+                val slot = processingKey.removeSuffix("_processing")
+                
+                // Safely get boolean value, handle potential type mismatch
+                val isProcessing = try {
+                    sharedPref.getBoolean(processingKey, false)
+                } catch (e: ClassCastException) {
+                    Log.w("InspectionActivity", "Key '$processingKey' is not a boolean, cleaning up...")
+                    // Clean up this corrupted key
+                    val editor = sharedPref.edit()
+                    editor.remove(processingKey)
+                    editor.apply()
+                    Log.d("InspectionActivity", "Cleaned up corrupted key: $processingKey")
+                    false
+                }
+                
+                Log.d("InspectionActivity", "Processing key '$processingKey' -> slot '$slot', isProcessing: $isProcessing")
+                
+                if (isProcessing) {
+                    Log.d("InspectionActivity", "Slot '$slot' has processing in progress, syncing state...")
+                    syncSlotStateFromSharedPrefs(slot)
+                }
+            }
+            
+            Log.d("InspectionActivity", "=== FINISHED CHECKING FOR PROCESSING IN PROGRESS ===")
+            
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error checking for processing in progress: ${e.message}", e)
+        }
+    }
+
+    private fun cleanOldFormatProcessingData(sharedPref: android.content.SharedPreferences, allKeys: Set<String>) {
+        try {
+            Log.d("InspectionActivity", "=== CLEANING OLD FORMAT PROCESSING DATA ===")
+            
+            val editor = sharedPref.edit()
+            var cleanedCount = 0
+            
+            // Find keys that end with "_processing" but are not boolean
+            val processingKeys = allKeys.filter { 
+                it.endsWith("_processing") && !it.contains("_processing_")
+            }
+            
+            processingKeys.forEach { key ->
+                try {
+                    // Try to read as boolean, if it fails, it's old format
+                    sharedPref.getBoolean(key, false)
+                    Log.d("InspectionActivity", "Key '$key' is already in correct boolean format")
+                } catch (e: ClassCastException) {
+                    Log.w("InspectionActivity", "Found old format key '$key', cleaning up...")
+                    editor.remove(key)
+                    cleanedCount++
+                }
+            }
+            
+            if (cleanedCount > 0) {
+                editor.apply()
+                Log.d("InspectionActivity", "Cleaned up $cleanedCount old format keys")
+            } else {
+                Log.d("InspectionActivity", "No old format keys found")
+            }
+            
+            Log.d("InspectionActivity", "=== FINISHED CLEANING OLD FORMAT DATA ===")
+            
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error cleaning old format data: ${e.message}", e)
+        }
+    }
+
+    private fun syncSlotStateFromSharedPrefs(slot: String) {
+        try {
+            Log.d("InspectionActivity", "=== SYNCING SLOT STATE FROM SHAREDPREFS FOR: $slot ===")
+            
+            val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
+            
+            // Check if there's a progress message
+            val progressMessage = sharedPref.getString("${slot}_progress", "")
+            Log.d("InspectionActivity", "Progress message for '$slot': '$progressMessage'")
+            
+            if (!progressMessage.isNullOrEmpty()) {
+                Log.d("InspectionActivity", "Found progress message for '$slot': $progressMessage")
+                
+                // Check UI elements
+                val statusText = slotStatusTexts[slot]
+                val progressOverlay = slotProgressOverlays[slot]
+                val cameraIcon = slotCameraIcons[slot]
+                
+                Log.d("InspectionActivity", "UI elements for '$slot': statusText=${statusText != null}, progressOverlay=${progressOverlay != null}, cameraIcon=${cameraIcon != null}")
+                
+                // Update progress overlay
+                statusText?.let { textView ->
+                    Log.d("InspectionActivity", "Updating status text for '$slot' to: $progressMessage")
+                    textView.text = progressMessage
+                    textView.visibility = android.view.View.VISIBLE
+                } ?: Log.w("InspectionActivity", "StatusText not found for slot '$slot'")
+                
+                // Show progress overlay
+                progressOverlay?.let { overlay ->
+                    Log.d("InspectionActivity", "Showing progress overlay for '$slot'")
+                    overlay.visibility = android.view.View.VISIBLE
+                } ?: Log.w("InspectionActivity", "ProgressOverlay not found for slot '$slot'")
+                
+                cameraIcon?.let { icon ->
+                    Log.d("InspectionActivity", "Hiding camera icon for '$slot'")
+                    icon.visibility = android.view.View.GONE
+                } ?: Log.w("InspectionActivity", "CameraIcon not found for slot '$slot'")
+            } else {
+                Log.d("InspectionActivity", "No progress message found for '$slot'")
+            }
+            
+            // Check if there's final inspection data
+            val estadoInspeccion = sharedPref.getString("${slot}_estadoInspeccion", "")
+            val imageUrl = sharedPref.getString("${slot}_imageUrl", "")
+            
+            Log.d("InspectionActivity", "Final data for '$slot': estadoInspeccion='$estadoInspeccion', imageUrl='$imageUrl'")
+            
+            if (!estadoInspeccion.isNullOrEmpty()) {
+                Log.d("InspectionActivity", "Found final inspection data for '$slot': $estadoInspeccion")
+                
+                // Update slot status
+                updateSlotStatusWithInspection(slot, estadoInspeccion)
+                
+                // Load image if available
+                if (!imageUrl.isNullOrEmpty()) {
+                    Log.d("InspectionActivity", "Loading image for '$slot': $imageUrl")
+                    latestPreviewUrlBySlot[slot] = imageUrl
+                    previews[slot]?.let { imageView ->
+                        loadImageWithRetry(imageView, imageUrl)
+                    } ?: Log.w("InspectionActivity", "Preview ImageView not found for slot '$slot'")
+                }
+            }
+            
+            Log.d("InspectionActivity", "=== SLOT STATE SYNCED FOR: $slot ===")
+            
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error syncing slot state for '$slot': ${e.message}", e)
+        }
+    }
+
+    private fun startPollingForProgressUpdates() {
+        try {
+            Log.d("InspectionActivity", "=== STARTING PROGRESS POLLING ===")
+            
+            // Stop any existing polling first
+            stopPollingForProgressUpdates()
+            
+            progressPollingHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            progressPollingRunnable = object : Runnable {
+                override fun run() {
+                    pollForProgressUpdates()
+                    progressPollingHandler?.postDelayed(this, 1000) // Poll every second
+                }
+            }
+            
+            progressPollingRunnable?.let { runnable ->
+                progressPollingHandler?.post(runnable)
+                Log.d("InspectionActivity", "Progress polling started successfully")
+            } ?: Log.e("InspectionActivity", "Failed to create polling runnable")
+            
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error starting progress polling: ${e.message}", e)
+        }
+    }
+
+    private fun stopPollingForProgressUpdates() {
+        try {
+            Log.d("InspectionActivity", "=== STOPPING PROGRESS POLLING ===")
+            
+            progressPollingRunnable?.let { runnable ->
+                progressPollingHandler?.removeCallbacks(runnable)
+                Log.d("InspectionActivity", "Removed polling callbacks")
+            } ?: Log.d("InspectionActivity", "No polling runnable to remove")
+            
+            progressPollingHandler = null
+            progressPollingRunnable = null
+            
+            Log.d("InspectionActivity", "Progress polling stopped")
+            
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error stopping progress polling: ${e.message}", e)
+        }
+    }
+
+    private fun pollForProgressUpdates() {
+        try {
+            val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
+            val allKeys = sharedPref.all.keys
+            
+            Log.d("InspectionActivityPolling", "=== POLLING CYCLE START ===")
+            Log.d("InspectionActivityPolling", "All SharedPreferences keys: $allKeys")
+            
+            // Look for processing state keys (exactly "_processing", not containing other suffixes)
+            val processingSlots = allKeys.filter { 
+                it.endsWith("_processing") && !it.contains("_processing_")
+            }
+            Log.d("InspectionActivityPolling", "Found ${processingSlots.size} processing slots: $processingSlots")
+            val activeProcessingSlots = mutableSetOf<String>()
+            
+            processingSlots.forEach { processingKey ->
+                val slot = processingKey.removeSuffix("_processing")
+                
+                // Safely get boolean value, handle potential type mismatch
+                val isProcessing = try {
+                    sharedPref.getBoolean(processingKey, false)
+                } catch (e: ClassCastException) {
+                    Log.w("InspectionActivityPolling", "Key '$processingKey' is not a boolean, cleaning up...")
+                    // Clean up this corrupted key immediately
+                    val editor = sharedPref.edit()
+                    editor.remove(processingKey)
+                    editor.apply()
+                    Log.d("InspectionActivityPolling", "Cleaned up corrupted key in polling: $processingKey")
+                    false
+                }
+                
+                Log.d("InspectionActivityPolling", "Processing slot '$slot': isProcessing=$isProcessing")
+                
+                if (isProcessing) {
+                    activeProcessingSlots.add(slot)
+                    // Check for progress updates
+                    val progressMessage = sharedPref.getString("${slot}_progress", "")
+                    Log.d("InspectionActivityPolling", "Progress message for '$slot': '$progressMessage'")
+                    
+                    if (!progressMessage.isNullOrEmpty()) {
+                        Log.d("InspectionActivityPolling", "Polling: Found progress for '$slot': $progressMessage")
+                        
+                        // Check if UI elements exist
+                        val statusText = slotStatusTexts[slot]
+                        val progressOverlay = slotProgressOverlays[slot]
+                        val cameraIcon = slotCameraIcons[slot]
+                        
+                        Log.d("InspectionActivityPolling", "UI elements for '$slot': statusText=${statusText != null}, progressOverlay=${progressOverlay != null}, cameraIcon=${cameraIcon != null}")
+                        
+                        // Update progress overlay
+                        statusText?.let { textView ->
+                            Log.d("InspectionActivityPolling", "Updating status text for '$slot' to: $progressMessage")
+                            textView.text = progressMessage
+                            textView.visibility = android.view.View.VISIBLE
+                        } ?: Log.w("InspectionActivityPolling", "StatusText not found for slot '$slot'")
+                        
+                        // Show progress overlay
+                        progressOverlay?.let { overlay ->
+                            Log.d("InspectionActivityPolling", "Showing progress overlay for '$slot'")
+                            overlay.visibility = android.view.View.VISIBLE
+                        } ?: Log.w("InspectionActivityPolling", "ProgressOverlay not found for slot '$slot'")
+                        
+                        cameraIcon?.let { icon ->
+                            Log.d("InspectionActivityPolling", "Hiding camera icon for '$slot'")
+                            icon.visibility = android.view.View.GONE
+                        } ?: Log.w("InspectionActivityPolling", "CameraIcon not found for slot '$slot'")
+                    } else {
+                        Log.d("InspectionActivityPolling", "No progress message found for '$slot'")
+                    }
+                    
+                   
+                } else {
+                    Log.d("InspectionActivityPolling", "Slot '$slot' is not processing")
+                }
+
+                val statusSlots = allKeys.filter { 
+                    it.endsWith("_estadoInspeccion") && !it.contains("_estadoInspeccion")
+                }
+
+                statusSlots.forEach { statusKey ->
+                    val slot = statusKey.removeSuffix("_estadoInspeccion")
+
+                    // Check for final inspection data
+                    val estadoInspeccion = sharedPref.getString("${slot}_estadoInspeccion", "")
+                    val imageUrl = sharedPref.getString("${slot}_imageUrl", "")
+
+                    Log.d("InspectionActivityPolling", "Final data for '$slot': estadoInspeccion='$estadoInspeccion', imageUrl='$imageUrl'")
+
+                    if (!estadoInspeccion.isNullOrEmpty()) {
+                        Log.d("InspectionActivityPolling", "Polling: Found final inspection data for '$slot': $estadoInspeccion")
+
+                        // Update slot status
+                        updateSlotStatusWithInspection(slot, estadoInspeccion)
+
+                        // Load image if available
+                        if (!imageUrl.isNullOrEmpty()) {
+                            Log.d("InspectionActivityPolling", "Loading image for '$slot': $imageUrl")
+                            latestPreviewUrlBySlot[slot] = imageUrl
+                            previews[slot]?.let { imageView ->
+                                loadImageWithRetry(imageView, imageUrl)
+                            } ?: Log.w("InspectionActivityPolling", "Preview ImageView not found for slot '$slot'")
+                        }
+
+                        // Stop polling for this slot since it's completed
+                        val editor = sharedPref.edit()
+                        editor.remove("${slot}_processing")
+                        editor.apply()
+                        Log.d("InspectionActivityPolling", "Removed processing flag for completed slot '$slot'")
+                    }
+                    
+                }
+
+
+
+            }
+
+             
+            // Clear progress UI for any slot NOT actively processing
+            inspectionViews.forEach { inspectionView ->
+                val slot = "inspection_view_${inspectionView.id}"
+                if (!activeProcessingSlots.contains(slot)) {
+                    val statusText = slotStatusTexts[slot]
+                    val progressOverlay = slotProgressOverlays[slot]
+                    val cameraIcon = slotCameraIcons[slot]
+                    statusText?.visibility = android.view.View.GONE
+                    progressOverlay?.visibility = android.view.View.GONE
+                    cameraIcon?.visibility = android.view.View.VISIBLE
+                    Log.d("InspectionActivityPolling", "Cleared progress UI for non-processing slot: $slot")
+                }
+            }
+            
+            Log.d("InspectionActivityPolling", "=== POLLING CYCLE END ===")
+            
+        } catch (e: Exception) {
+            Log.e("InspectionActivity", "Error polling for progress updates: ${e.message}", e)
         }
     }
 }
