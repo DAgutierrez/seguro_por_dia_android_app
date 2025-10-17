@@ -14,12 +14,12 @@ import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.DataSource
 import android.graphics.drawable.Drawable
+import kotlinx.coroutines.delay
 
 // Simple data class for inspection data
 data class InspectionData(
@@ -380,19 +380,6 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 }
                 
                 Log.d("InspectionActivity", "Processing photo capture for slot='$slot'")
-                Log.d("InspectionActivity", "Debug values: inspectionViewId=$inspectionViewId, storagePath='$storagePath'")
-                
-                // Check if we need to start prechecks (from detail view)
-                val startPrechecks = data.getBooleanExtra("startPrechecks", false)
-                if (startPrechecks && inspectionViewId > 0 && storagePath.isNotEmpty()) {
-                    Log.d("InspectionActivity", "Starting precheck in background for slot: $slot (from detail view)")
-                   // startPrecheckInBackground(slot, storagePath, baseUrl, inspectionViewId)
-                } else if (!startPrechecks) {
-                    Log.d("InspectionActivity", "No prechecks needed for slot: $slot (detail view will handle)")
-                } else {
-                    Log.e("InspectionActivity", "Cannot start prechecks: inspectionViewId=$inspectionViewId, storagePath='$storagePath'")
-                    Log.e("InspectionActivity", "This indicates a serious error in the camera flow")
-                }
             } else if (resultCode != Activity.RESULT_CANCELED) {
                 Log.w("InspectionActivity", "Unexpected result code: $resultCode")
             }
@@ -453,251 +440,6 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
         }
     }
     
-    private fun startPrecheckInBackground(slot: String, storagePath: String, uploadedPublicUrl: String, inspectionViewId: Int) {
-        Log.d("InspectionActivity", "Starting precheck in background for slot='$slot'")
-        Log.d("InspectionActivity", "Parameters: storagePath='$storagePath', uploadedPublicUrl='$uploadedPublicUrl', inspectionViewId=$inspectionViewId")
-        Log.d("InspectionActivity", "UI refs available? overlay=${slotProgressOverlays.containsKey(slot)} statusText=${slotStatusTexts.containsKey(slot)} normalText=${slotStatusNormalTexts.containsKey(slot)} cameraIcon=${slotCameraIcons.containsKey(slot)}")
-        
-        // Show progress overlay and hide camera icon
-        slotProgressOverlays[slot]?.visibility = android.view.View.VISIBLE
-        slotCameraIcons[slot]?.visibility = android.view.View.GONE
-        slotStatusTexts[slot]?.text = "Validando..."
-        slotStatusTexts[slot]?.setTextColor(0xFF1976D2.toInt())
-        // Fallback: also reflect progress in the normal status area in case overlay is not visible yet
-        slotStatusNormalTexts[slot]?.text = "Validando..."
-        slotStatusNormalTexts[slot]?.setTextColor(0xFF1976D2.toInt())
-        Log.d("InspectionActivity", "Progress UI updated for slot=$slot: overlayVisible=${slotProgressOverlays[slot]?.visibility == android.view.View.VISIBLE}")
-
-        // If UI refs aren't ready yet (first time, inflation delay), wait briefly and then show overlay
-        if (!slotProgressOverlays.containsKey(slot) || !slotStatusTexts.containsKey(slot) || !slotCameraIcons.containsKey(slot)) {
-            launch {
-                repeat(12) { // ~1.2s total
-                    delay(100)
-                    if (slotProgressOverlays.containsKey(slot) && slotStatusTexts.containsKey(slot) && slotCameraIcons.containsKey(slot)) {
-                        withContext(Dispatchers.Main) {
-                            slotProgressOverlays[slot]?.visibility = android.view.View.VISIBLE
-                            slotCameraIcons[slot]?.visibility = android.view.View.GONE
-                            slotStatusTexts[slot]?.text = "Validando..."
-                            slotStatusTexts[slot]?.setTextColor(0xFF1976D2.toInt())
-                            Log.d("InspectionActivity", "Delayed UI setup applied for slot=$slot (overlay now visible)")
-                        }
-                        return@launch
-                    }
-                }
-                Log.w("InspectionActivity", "UI refs still not ready after wait for slot=$slot; continuing without overlay")
-            }
-        }
-        
-        launch(Dispatchers.IO) {
-            try {
-                val prechecks = SupabaseClientProvider.getPrechecksForInspectionView(inspectionViewId)
-                Log.d("InspectionActivity", "Found ${prechecks.size} prechecks for inspectionViewId=$inspectionViewId")
-                
-                if (prechecks.isEmpty()) {
-                    withContext(Dispatchers.Main) {
-                        slotProgressOverlays[slot]?.visibility = android.view.View.GONE
-                        slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
-                        slotStatusNormalTexts[slot]?.text = "Validado ✓"
-                        slotStatusNormalTexts[slot]?.setTextColor(0xFF4CAF50.toInt())
-                        Log.d("InspectionActivity", "Prechecks empty → marking as valid for slot=$slot")
-                        Log.d("InspectionActivity", "No prechecks found, hiding overlay for slot: $slot")
-                    }
-                    return@launch
-                }
-
-                // Sort prechecks by order column
-                val sortedPrechecks = prechecks.sortedBy { it.order }
-                Log.d("InspectionActivity", "Sorted prechecks by order: $sortedPrechecks")
-                
-                var inspectionDataHandled = false
-                
-                for (i in sortedPrechecks.indices) {
-                    val p = sortedPrechecks[i]
-                    val isLastPrecheck = (i == sortedPrechecks.size - 1)
-                    
-                    withContext(Dispatchers.Main) {
-                        val stepMsg = "Validando paso ${i + 1} de ${sortedPrechecks.size} (Order: ${p.order})"
-                        val detailMsg = "Validando ${p.name}"
-                        
-                        slotStatusTexts[slot]?.text = stepMsg
-                        // Fallback: mirror the step message in normal area so progress is visible even if overlay is delayed
-                        slotStatusNormalTexts[slot]?.text = stepMsg
-                        slotStatusNormalTexts[slot]?.setTextColor(0xFF1976D2.toInt())
-                        
-                        // Update detail view progress via SharedPreferences
-                        updateDetailViewProgress(slot, detailMsg)
-                        
-                        Log.d("InspectionActivity", "Updated status for slot $slot: $stepMsg, detail: $detailMsg")
-                    }
-                    
-                    val bodyJson = org.json.JSONObject().apply {
-                        put("imageUrl", storagePath)
-                        put("responseValue", p.responseValue)
-                    }.toString()
-                    
-                    val responseText = SupabaseClientProvider.postJson(p.url, bodyJson)
-                    
-                    val success = try {
-                        val responseJson = org.json.JSONObject(responseText)
-                        responseJson.getBoolean("success")
-                    } catch (e: Exception) {
-                        Log.e("InspectionActivity", "Error parsing response JSON: ${e.message}")
-                        false
-                    }
-                    
-                    // Check if this is the last precheck and has inspection data
-                    var inspectionData: org.json.JSONObject? = null
-                    if (isLastPrecheck && success) {
-                        try {
-                            val responseJson = org.json.JSONObject(responseText)
-                            if (responseJson.has("estado_inspeccion") && responseJson.has("comentarios_inspeccion")) {
-                                inspectionData = responseJson
-                                Log.d("InspectionActivity", "Inspection data found: ${inspectionData.toString()}")
-                            }
-                        } catch (e: Exception) {
-                            Log.e("InspectionActivity", "Error parsing inspection data: ${e.message}")
-                        }
-                    }
-                    
-                    if (!success && !isLastPrecheck) {
-                        withContext(Dispatchers.Main) {
-                            slotProgressOverlays[slot]?.visibility = android.view.View.GONE
-                            slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
-                            
-                            // Save failed precheck result as inspection data (don't delete image)
-                            val failedInspectionData = InspectionData(
-                                imageUrl = uploadedPublicUrl,
-                                estadoInspeccion = "Rechazada",
-                                comentariosInspeccion = p.errorMessage,
-                                inspectionViewId = inspectionViewId,
-                                timestamp = System.currentTimeMillis(),
-                                slot = slot
-                            )
-                            saveInspectionData(failedInspectionData)
-                            
-                            Log.d("InspectionActivity", "Precheck failed for slot: $slot, saving as rejected inspection data")
-                        }
-                        return@launch
-                    }
-                    
-                    // Handle inspection data if present (last precheck with data)
-                    if (isLastPrecheck && inspectionData != null) {
-                        inspectionDataHandled = true
-                        withContext(Dispatchers.Main) {
-                            try {
-                                val estadoInspeccion = inspectionData.getString("estado_inspeccion")
-                                val comentariosInspeccion = inspectionData.getString("comentarios_inspeccion")
-                                
-                                // Save inspection data locally
-                                val inspectionDataObj = InspectionData(
-                                    imageUrl = uploadedPublicUrl,
-                                    estadoInspeccion = estadoInspeccion,
-                                    comentariosInspeccion = comentariosInspeccion,
-                                    inspectionViewId = inspectionViewId,
-                                    timestamp = System.currentTimeMillis(),
-                                    slot = slot
-                                )
-                                saveInspectionData(inspectionDataObj)
-                                
-                                // Update UI with inspection status
-                                updateSlotStatusWithInspection(slot, estadoInspeccion)
-                                
-                                slotProgressOverlays[slot]?.visibility = android.view.View.GONE
-                                slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
-                                
-                                android.widget.Toast.makeText(
-                                    this@InspectionActivity,
-                                    "Inspección completada: $estadoInspeccion",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                                
-                                Log.d("InspectionActivity", "Inspection data handled for slot: $slot, estado: $estadoInspeccion")
-                            } catch (e: Exception) {
-                                Log.e("InspectionActivity", "Error handling inspection data: ${e.message}")
-                            }
-                        }
-                        return@launch
-                    }
-                }
-                
-                // Only execute normal success flow if no inspection data was handled
-                if (!inspectionDataHandled) {
-                    withContext(Dispatchers.Main) {
-                        slotProgressOverlays[slot]?.visibility = android.view.View.GONE
-                        slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
-                        slotStatusNormalTexts[slot]?.text = "Validado ✓"
-                        slotStatusNormalTexts[slot]?.setTextColor(0xFF4CAF50.toInt())
-                        Log.d("InspectionActivity", "No inspection data handled → normal success flow for slot=$slot")
-                        
-                        android.widget.Toast.makeText(
-                            this@InspectionActivity,
-                            "Imagen validada exitosamente",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-                
-            } catch (e: Exception) {
-                Log.e("InspectionActivity", "Precheck error: ${e.message}", e)
-                withContext(Dispatchers.Main) {
-                    slotProgressOverlays[slot]?.visibility = android.view.View.GONE
-                    slotCameraIcons[slot]?.visibility = android.view.View.VISIBLE
-                    slotStatusTexts[slot]?.text = "Error en validación"
-                    slotStatusTexts[slot]?.setTextColor(0xFFF44336.toInt())
-                    
-                    android.widget.Toast.makeText(
-                        this@InspectionActivity,
-                        "Error en validación: ${e.message}",
-                        android.widget.Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
-    }
-    
-    private fun updateDetailViewProgress(slot: String, progressMessage: String) {
-        try {
-            val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
-            val editor = sharedPref.edit()
-            val key = "${slot}_progress"
-            
-            Log.d("InspectionActivity", "Saving progress - slot: '$slot', key: '$key', message: '$progressMessage'")
-            
-            editor.putString(key, progressMessage)
-            val success = editor.commit() // Use commit() instead of apply() for immediate writing
-            
-            Log.d("InspectionActivity", "Updated detail view progress for slot $slot: $progressMessage, success: $success")
-            
-            // Verify it was saved
-            val saved = sharedPref.getString(key, "")
-            Log.d("InspectionActivity", "Verified saved progress for key '$key': '$saved'")
-            
-            // Also log all keys to debug
-            val allKeys = sharedPref.all.keys
-            val progressKeys = allKeys.filter { it.contains("_progress") }
-            Log.d("InspectionActivity", "All progress keys in SharedPreferences: $progressKeys")
-        } catch (e: Exception) {
-            Log.e("InspectionActivity", "Error updating detail view progress: ${e.message}")
-        }
-    }
-    
-    private fun saveInspectionData(inspectionData: InspectionData) {
-        try {
-            val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
-            val editor = sharedPref.edit()
-            val key = inspectionData.slot
-            
-            editor.putString("${key}_imageUrl", inspectionData.imageUrl)
-            editor.putString("${key}_estadoInspeccion", inspectionData.estadoInspeccion)
-            editor.putString("${key}_comentariosInspeccion", inspectionData.comentariosInspeccion)
-            editor.putInt("${key}_inspectionViewId", inspectionData.inspectionViewId)
-            editor.apply()
-            Log.d("InspectionActivity", "Inspection data saved locally for slot: ${inspectionData.slot}")
-        } catch (e: Exception) {
-            Log.e("InspectionActivity", "Error saving inspection data: ${e.message}")
-        }
-    }
-
     private fun getInspectionDataForSlot(slot: String): InspectionData? {
         try {
             val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
@@ -766,7 +508,7 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
             cameraIcon?.visibility = android.view.View.VISIBLE
 
             // Update card background color based on status
-            updateSlotCardBackground(slot, estadoInspeccion)
+            //updateSlotCardBackground(slot, estadoInspeccion)
 
             Log.d("InspectionActivity", "Updated slot status for '$slot': $estadoInspeccion")
         } ?: Log.w("InspectionActivity", "StatusText not found for slot '$slot'")
