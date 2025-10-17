@@ -1157,46 +1157,46 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
                 } else {
                     Log.d("InspectionActivityPolling", "Slot '$slot' is not processing")
                 }
+            }
+            
+            // Check for final inspection data for all slots (outside processingSlots loop)
+            val statusSlots = allKeys.filter { 
+                it.endsWith("_estadoInspeccion")
+            }
+            Log.d("InspectionActivityPolling", "Found ${statusSlots.size} slots with final inspection data: $statusSlots")
 
-                val statusSlots = allKeys.filter { 
-                    it.endsWith("_estadoInspeccion") && !it.contains("_estadoInspeccion")
-                }
+            statusSlots.forEach { statusKey ->
+                val slot = statusKey.removeSuffix("_estadoInspeccion")
 
-                statusSlots.forEach { statusKey ->
-                    val slot = statusKey.removeSuffix("_estadoInspeccion")
+                // Check for final inspection data
+                val estadoInspeccion = sharedPref.getString("${slot}_estadoInspeccion", "")
+                val imageUrl = sharedPref.getString("${slot}_imageUrl", "")
 
-                    // Check for final inspection data
-                    val estadoInspeccion = sharedPref.getString("${slot}_estadoInspeccion", "")
-                    val imageUrl = sharedPref.getString("${slot}_imageUrl", "")
+                Log.d("InspectionActivityPolling", "Final data for '$slot': estadoInspeccion='$estadoInspeccion', imageUrl='$imageUrl'")
 
-                    Log.d("InspectionActivityPolling", "Final data for '$slot': estadoInspeccion='$estadoInspeccion', imageUrl='$imageUrl'")
+                if (!estadoInspeccion.isNullOrEmpty()) {
+                    Log.d("InspectionActivityPolling", "Polling: Found final inspection data for '$slot': $estadoInspeccion")
 
-                    if (!estadoInspeccion.isNullOrEmpty()) {
-                        Log.d("InspectionActivityPolling", "Polling: Found final inspection data for '$slot': $estadoInspeccion")
+                    // Update slot status
+                    updateSlotStatusWithInspection(slot, estadoInspeccion)
 
-                        // Update slot status
-                        updateSlotStatusWithInspection(slot, estadoInspeccion)
+                    // Load image if available
+                    // if (!imageUrl.isNullOrEmpty()) {
+                    //     Log.d("InspectionActivityPolling", "Loading image for '$slot': $imageUrl")
+                    //     latestPreviewUrlBySlot[slot] = imageUrl
+                    //     previews[slot]?.let { imageView ->
+                    //         loadImageWithRetry(imageView, imageUrl)
+                    //     } ?: Log.w("InspectionActivityPolling", "Preview ImageView not found for slot '$slot'")
+                    // }
 
-                        // Load image if available
-                        if (!imageUrl.isNullOrEmpty()) {
-                            Log.d("InspectionActivityPolling", "Loading image for '$slot': $imageUrl")
-                            latestPreviewUrlBySlot[slot] = imageUrl
-                            previews[slot]?.let { imageView ->
-                                loadImageWithRetry(imageView, imageUrl)
-                            } ?: Log.w("InspectionActivityPolling", "Preview ImageView not found for slot '$slot'")
-                        }
-
-                        // Stop polling for this slot since it's completed
+                    // Remove processing flag if it exists
+                    if (sharedPref.contains("${slot}_processing")) {
                         val editor = sharedPref.edit()
                         editor.remove("${slot}_processing")
                         editor.apply()
                         Log.d("InspectionActivityPolling", "Removed processing flag for completed slot '$slot'")
                     }
-                    
                 }
-
-
-
             }
 
              
