@@ -443,26 +443,25 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     private fun getInspectionDataForSlot(slot: String): InspectionData? {
         try {
             val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
-            val allKeys = sharedPref.all.keys
-            val slotKeys = allKeys.filter { it.startsWith("${slot}_") && it.endsWith("_slot") }
             
-            if (slotKeys.isEmpty()) return null
+            // Check if there's inspection data for this slot
+            val imageUrl = sharedPref.getString("${slot}_imageUrl", "")
+            val estadoInspeccion = sharedPref.getString("${slot}_estadoInspeccion", "")
+            val comentariosInspeccion = sharedPref.getString("${slot}_comentariosInspeccion", "")
+            val inspectionViewId = sharedPref.getInt("${slot}_inspectionViewId", 0)
             
-            // Get the most recent one
-            val latestKey = slotKeys.maxByOrNull { key ->
-                val timestampKey = key.replace("_slot", "_timestamp")
-                sharedPref.getLong(timestampKey, 0L)
-            } ?: return null
-            
-            val baseKey = latestKey.replace("_slot", "")
+            // If no data found, return null
+            if (imageUrl.isNullOrEmpty() || estadoInspeccion.isNullOrEmpty()) {
+                return null
+            }
             
             return InspectionData(
-                imageUrl = sharedPref.getString("${baseKey}_imageUrl", "") ?: "",
-                estadoInspeccion = sharedPref.getString("${baseKey}_estadoInspeccion", "") ?: "",
-                comentariosInspeccion = sharedPref.getString("${baseKey}_comentariosInspeccion", "") ?: "",
-                inspectionViewId = sharedPref.getString("${baseKey}_inspectionViewId", "0")?.toIntOrNull() ?: 0,
-                timestamp = sharedPref.getLong("${baseKey}_timestamp", 0L),
-                slot = sharedPref.getString("${baseKey}_slot", "") ?: ""
+                imageUrl = imageUrl ?: "",
+                estadoInspeccion = estadoInspeccion ?: "",
+                comentariosInspeccion = comentariosInspeccion ?: "",
+                inspectionViewId = inspectionViewId,
+                timestamp = System.currentTimeMillis(), // Not used but required by data class
+                slot = slot
             )
         } catch (e: Exception) {
             Log.e("InspectionActivity", "Error getting inspection data: ${e.message}")
@@ -551,32 +550,27 @@ class InspectionActivity : AppCompatActivity(), CoroutineScope by CoroutineScope
     private fun loadExistingInspectionData() {
         try {
             val sharedPref = getSharedPreferences("inspection_data", android.content.Context.MODE_PRIVATE)
-            val allKeys = sharedPref.all.keys
-            val slotKeys = allKeys.filter { it.endsWith("_slot") }
             
-            Log.d("InspectionActivity", "Found ${slotKeys.size} existing inspection data entries")
-            
-            slotKeys.forEach { key ->
-                val baseKey = key.replace("_slot", "")
-                val slot = sharedPref.getString(key, "")
-                if (slot != null && slot.isNotEmpty()) {
-                    val imageUrl = sharedPref.getString("${baseKey}_imageUrl", "")
-                    val estadoInspeccion = sharedPref.getString("${baseKey}_estadoInspeccion", "")
+            // Load inspection data for each slot
+            inspectionViews.forEach { inspectionView ->
+                val slot = "inspection_view_${inspectionView.id}"
+                
+                val imageUrl = sharedPref.getString("${slot}_imageUrl", "")
+                val estadoInspeccion = sharedPref.getString("${slot}_estadoInspeccion", "")
+                
+                if (!imageUrl.isNullOrEmpty() && !estadoInspeccion.isNullOrEmpty()) {
+                    // Update UI for this slot
+                    updateSlotStatusWithInspection(slot, estadoInspeccion)
                     
-                    if (imageUrl != null && estadoInspeccion != null && imageUrl.isNotEmpty() && estadoInspeccion.isNotEmpty()) {
-                        // Update UI for this slot
-                        updateSlotStatusWithInspection(slot, estadoInspeccion)
-                        
-                        // Load image if not already loaded
-                        previews[slot]?.let { imageView ->
-                            if (latestPreviewUrlBySlot[slot] != imageUrl) {
-                                latestPreviewUrlBySlot[slot] = imageUrl
-                                loadImageWithRetry(imageView, imageUrl)
-                            }
+                    // Load image if not already loaded
+                    previews[slot]?.let { imageView ->
+                        if (latestPreviewUrlBySlot[slot] != imageUrl) {
+                            latestPreviewUrlBySlot[slot] = imageUrl
+                            loadImageWithRetry(imageView, imageUrl)
                         }
-                        
-                        Log.d("InspectionActivity", "Loaded existing inspection data for slot: $slot, estado: $estadoInspeccion")
                     }
+                    
+                    Log.d("InspectionActivity", "Loaded existing inspection data for slot: $slot, estado: $estadoInspeccion")
                 }
             }
         } catch (e: Exception) {

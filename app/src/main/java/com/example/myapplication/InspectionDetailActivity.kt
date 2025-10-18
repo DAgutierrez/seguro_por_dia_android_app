@@ -254,23 +254,12 @@ class InspectionDetailActivity : AppCompatActivity() {
                     }
                     
                     // Then check if inspection data is now available
-                    val slotKeys = allPrefKeys.filter { it.startsWith("${slot}_") && it.endsWith("_slot") }
+                    val estadoInspeccion = sharedPref.getString("${slot}_estadoInspeccion", "")
+                    val comentariosInspeccion = sharedPref.getString("${slot}_comentariosInspeccion", "")
                     
-                    if (slotKeys.isNotEmpty()) {
-                        // Get the most recent one
-                        val latestKey = slotKeys.maxByOrNull { key ->
-                            val timestampKey = key.replace("_slot", "_timestamp")
-                            sharedPref.getLong(timestampKey, 0L)
-                        }
-                        
-                        if (latestKey != null) {
-                            val baseKey = latestKey.replace("_slot", "")
-                            val estadoInspeccion = sharedPref.getString("${baseKey}_estadoInspeccion", "")
-                            val comentariosInspeccion = sharedPref.getString("${baseKey}_comentariosInspeccion", "")
-                            
-                            if (estadoInspeccion != null && estadoInspeccion.isNotEmpty() && 
-                                comentariosInspeccion != null && comentariosInspeccion.isNotEmpty() &&
-                                estadoInspeccion != "Procesando...") {
+                    if (estadoInspeccion != null && estadoInspeccion.isNotEmpty() && 
+                        comentariosInspeccion != null && comentariosInspeccion.isNotEmpty() &&
+                        estadoInspeccion != "Procesando...") {
                                 
                                 // Processing completed!
                                 runOnUiThread {
@@ -298,8 +287,6 @@ class InspectionDetailActivity : AppCompatActivity() {
                                 }
                                 return
                             }
-                        }
-                    }
                     
                     // Continue polling if not max attempts reached
                     if (attempts < maxAttempts) {
@@ -364,24 +351,12 @@ class InspectionDetailActivity : AppCompatActivity() {
                     }
                     
                     // Check if inspection data is now available
-                    val allKeys = sharedPref.all.keys
-                    val slotKeys = allKeys.filter { it.startsWith("${slot}_") && it.endsWith("_slot") }
+                    val estadoInspeccion = sharedPref.getString("${slot}_estadoInspeccion", "")
+                    val comentariosInspeccion = sharedPref.getString("${slot}_comentariosInspeccion", "")
                     
-                    if (slotKeys.isNotEmpty()) {
-                        // Get the most recent one
-                        val latestKey = slotKeys.maxByOrNull { key ->
-                            val timestampKey = key.replace("_slot", "_timestamp")
-                            sharedPref.getLong(timestampKey, 0L)
-                        }
-                        
-                        if (latestKey != null) {
-                            val baseKey = latestKey.replace("_slot", "")
-                            val estadoInspeccion = sharedPref.getString("${baseKey}_estadoInspeccion", "")
-                            val comentariosInspeccion = sharedPref.getString("${baseKey}_comentariosInspeccion", "")
-                            
-                            if (estadoInspeccion != null && estadoInspeccion.isNotEmpty() && 
-                                comentariosInspeccion != null && comentariosInspeccion.isNotEmpty() &&
-                                estadoInspeccion != "Procesando...") {
+                    if (estadoInspeccion != null && estadoInspeccion.isNotEmpty() && 
+                        comentariosInspeccion != null && comentariosInspeccion.isNotEmpty() &&
+                        estadoInspeccion != "Procesando...") {
                                 
                                 // Processing completed!
                                 runOnUiThread {
@@ -409,8 +384,6 @@ class InspectionDetailActivity : AppCompatActivity() {
                                 }
                                 return
                             }
-                        }
-                    }
                     
                     // Continue polling if not max attempts reached
                     if (attempts < maxAttempts) {
@@ -642,6 +615,7 @@ class InspectionDetailActivity : AppCompatActivity() {
             val editor = sharedPref.edit()
             val baseKey = inspectionData.slot
             
+            // Save all inspection data fields
             editor.putString("${baseKey}_imageUrl", inspectionData.imageUrl)
             editor.putString("${baseKey}_estadoInspeccion", inspectionData.estadoInspeccion)
             editor.putString("${baseKey}_comentariosInspeccion", inspectionData.comentariosInspeccion)
@@ -845,7 +819,6 @@ class InspectionDetailActivity : AppCompatActivity() {
             Log.d("InspectionDetailActivity", "Clearing progress for slot '$slot', key: '$key'")
             
             editor.remove(key)
-            editor.remove("${key}_timestamp")
             editor.apply()
             
             Log.d("InspectionDetailActivity", "Progress cleared for slot: $slot")
